@@ -86,8 +86,8 @@ button, select, input{font-family:inherit;}
 .checkbox-field{flex-direction:row;align-items:center;gap:8px;}
 .checkbox-field input{accent-color:var(--teal);width:16px;height:16px;}
 .divider{height:1px;background:#2a2536;margin:2px 0;}
-.debug-log{background:var(--panel);border-radius:var(--radius-sm);padding:10px;font-family:ui-monospace,'SF Mono',monospace;font-size:.7rem;color:var(--ok);height:150px;overflow-y:auto;line-height:1.55;}
-.debug-log[hidden]{display:none;}
+.debug-log{background:var(--panel);border-radius:var(--radius-sm);padding:10px;font-family:ui-monospace,'SF Mono',monospace;font-size:.7rem;color:var(--ok);height:220px;overflow-y:auto;line-height:1.55;}
+#debugLogWrap[hidden]{display:none;}
 .debug-log div{opacity:.85;word-break:break-word;}
 
 .history-list{flex:1;overflow-y:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:10px;}
@@ -210,7 +210,10 @@ button, select, input{font-family:inherit;}
       <input type="checkbox" id="debugToggle">
       <span>Показывать журнал отладки</span>
     </label>
-    <div id="debugLog" class="debug-log" hidden></div>
+    <div id="debugLogWrap" hidden>
+      <button id="copyLogBtn" class="clear-history-btn" style="margin:0 0 8px;width:100%;">Скопировать журнал целиком</button>
+      <div id="debugLog" class="debug-log"></div>
+    </div>
   </div>
 </aside>
 
@@ -245,7 +248,7 @@ var els = {
   volSlider:$('volSlider'), volOut:$('volOut'),
   silSlider:$('silSlider'), silOut:$('silOut'),
   pauseSlider:$('pauseSlider'), pauseOut:$('pauseOut'),
-  debugToggle:$('debugToggle'), debugLog:$('debugLog'),
+  debugToggle:$('debugToggle'), debugLog:$('debugLog'), debugLogWrap:$('debugLogWrap'), copyLogBtn:$('copyLogBtn'),
   zonePT:$('zonePT'), zoneRU:$('zoneRU'),
   statusPT:$('statusPT'), statusRU:$('statusRU'),
   phrasePT:$('phrasePT'), phraseRU:$('phraseRU'),
@@ -362,13 +365,13 @@ TranslatorChannel.prototype.connect = function(){
           model: 'models/' + MODEL,
           generationConfig: {
             responseModalities: ['AUDIO'],
-            inputAudioTranscription: {},
-            outputAudioTranscription: {},
             translationConfig: {
               targetLanguageCode: self.target,
               echoTargetLanguage: false
             }
-          }
+          },
+          inputAudioTranscription: {},
+          outputAudioTranscription: {}
         }
       };
       ws.send(JSON.stringify(setupMsg));
@@ -811,7 +814,16 @@ els.pauseSlider.addEventListener('input', function(){
   store.set('rt_pauseMs', settings.pauseMs);
 });
 
-els.debugToggle.addEventListener('change', function(){ els.debugLog.hidden = !els.debugToggle.checked; });
+els.debugToggle.addEventListener('change', function(){ els.debugLogWrap.hidden = !els.debugToggle.checked; });
+els.copyLogBtn.addEventListener('click', function(){
+  var text = Array.prototype.map.call(els.debugLog.children, function(d){ return d.textContent; }).join('\n');
+  if (!text) { showToast('Журнал пока пуст'); return; }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ showToast('Журнал скопирован'); }).catch(function(){ showToast('Не удалось скопировать', 'error'); });
+  } else {
+    showToast('Копирование недоступно в этом браузере', 'error');
+  }
+});
 
 function setMode(m){
   if (mode === m) return;
