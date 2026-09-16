@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Голосовой переводчик RU ⇄ PT</title>
+<meta name="description" content="Перевод речи в реальном времени между русским и европейским португальским">
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#14121C">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Alegreya:wght@500;600&family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14121C; --panel:#1E1B29; --panel-2:#0E0C15;
+  --amber:#E3A458; --teal:#5FC4BE; --paper:#F3EFE8; --dim:#948FA3;
+  --danger:#E0706B; --ok:#6FCF97;
+  --radius-lg:24px; --radius-md:16px; --radius-sm:10px;
+  color-scheme: dark;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overscroll-behavior:none;}
+body{
+  font-family:'Golos Text',-apple-system,BlinkMacSystemFont,sans-serif;
+  background:var(--ink); color:var(--paper);
+  height:100dvh; overflow:hidden;
+  display:flex; flex-direction:column;
+}
+button, select, input{font-family:inherit;}
+#app{display:flex;flex-direction:column;height:100%;}
+
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;flex-shrink:0;}
+.wordmark{font-family:'Alegreya',serif;font-weight:600;font-size:1.1rem;letter-spacing:.02em;}
+.wordmark .arrow{color:var(--dim);font-weight:500;padding:0 3px;}
+.icon-btn{width:40px;height:40px;border-radius:50%;border:none;background:var(--panel);color:var(--paper);font-size:1.05rem;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.icon-btn:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+.net-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);transition:background .3s,box-shadow .3s;}
+.net-dot.offline{background:var(--danger);box-shadow:0 0 8px var(--danger);}
+
+.stage{flex:1;display:flex;flex-direction:column;min-height:0;padding:0 14px;gap:10px;}
+.zone{flex:1;border-radius:var(--radius-lg);background:var(--panel);display:flex;min-height:0;position:relative;transition:box-shadow .4s ease;}
+.zone--pt{transform:rotate(180deg);}
+.zone-inner{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:10px;min-height:0;width:100%;}
+.zone-label{font-size:.78rem;color:var(--dim);font-weight:500;}
+.zone-status{font-size:.92rem;color:var(--dim);min-height:1.2em;}
+.zone-phrase{font-family:'Alegreya',serif;font-weight:500;font-size:clamp(1.25rem,5vw,2rem);text-align:center;line-height:1.28;max-width:94%;overflow-y:auto;max-height:42%;color:var(--paper);}
+.zone-phrase.placeholder{color:var(--dim);font-style:italic;font-family:'Golos Text',sans-serif;font-size:.95rem;}
+.talk-btn{width:88px;height:88px;border-radius:50%;border:none;cursor:pointer;font-weight:600;font-size:.92rem;color:var(--ink);transition:transform .15s ease;flex-shrink:0;}
+.talk-btn--ru{background:var(--amber);}
+.talk-btn--pt{background:var(--teal);}
+.talk-btn:active{transform:scale(.94);}
+.talk-btn[hidden]{display:none;}
+.talk-btn.live{animation:pulse 1.4s ease-in-out infinite;}
+.talk-btn.inactive-ptt{opacity:.35;pointer-events:none;}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.35);}50%{box-shadow:0 0 0 14px rgba(255,255,255,0);}}
+.zone--active{box-shadow:0 0 0 1.5px var(--zone-accent) inset, 0 0 34px -6px var(--zone-accent);}
+.zone--ru{--zone-accent:var(--amber);}
+.zone--pt{--zone-accent:var(--teal);}
+
+.center-rail{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0;}
+.turn-indicator{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--dim);}
+.turn-dot{width:7px;height:7px;border-radius:50%;background:var(--dim);transition:background .3s,box-shadow .3s;}
+.turn-dot.on{background:var(--ok);box-shadow:0 0 6px var(--ok);}
+.ghost-btn{border:1px solid #322d40;background:transparent;color:var(--dim);border-radius:999px;padding:6px 14px;font-size:.78rem;cursor:pointer;}
+.ghost-btn[hidden]{display:none;}
+
+.bottombar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;flex-shrink:0;}
+.mode-switch{display:flex;background:var(--panel);border-radius:999px;padding:3px;flex-shrink:0;}
+.mode-opt{border:none;background:transparent;color:var(--dim);padding:7px 14px;border-radius:999px;font-size:.8rem;cursor:pointer;}
+.mode-opt.on{background:var(--paper);color:var(--ink);font-weight:600;}
+.primary-btn{flex:1;background:var(--teal);color:var(--ink);border:none;border-radius:999px;padding:12px 16px;font-weight:600;font-size:.88rem;cursor:pointer;}
+.primary-btn.stop{background:var(--danger);}
+.primary-btn[hidden]{display:none;}
+
+.panel{position:fixed;top:0;right:0;height:100%;width:min(360px,88vw);background:var(--panel-2);z-index:30;box-shadow:-12px 0 32px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .3s ease;display:flex;flex-direction:column;}
+.panel.open{transform:translateX(0);}
+.panel-head{display:flex;align-items:center;justify-content:space-between;padding:16px;flex-shrink:0;}
+.panel-head h2{font-family:'Alegreya',serif;font-weight:600;font-size:1.15rem;}
+.panel-body{padding:0 16px 24px;overflow-y:auto;display:flex;flex-direction:column;gap:16px;}
+.field{display:flex;flex-direction:column;gap:6px;font-size:.84rem;color:var(--dim);}
+.field input[type="password"],.field select{background:var(--panel);border:1px solid #322d40;border-radius:var(--radius-sm);padding:10px 12px;color:var(--paper);font-size:.88rem;}
+.field input[type="range"]{accent-color:var(--teal);}
+.field-hint{font-size:.72rem;color:var(--dim);opacity:.8;margin-top:-8px;line-height:1.4;}
+.checkbox-field{flex-direction:row;align-items:center;gap:8px;}
+.checkbox-field input{accent-color:var(--teal);width:16px;height:16px;}
+.divider{height:1px;background:#2a2536;margin:2px 0;}
+.debug-log{background:var(--panel);border-radius:var(--radius-sm);padding:10px;font-family:ui-monospace,'SF Mono',monospace;font-size:.7rem;color:var(--ok);height:150px;overflow-y:auto;line-height:1.55;}
+.debug-log[hidden]{display:none;}
+.debug-log div{opacity:.85;word-break:break-word;}
+
+.history-list{flex:1;overflow-y:auto;padding:0 16px 16px;display:flex;flex-direction:column;gap:10px;}
+.history-item{background:var(--panel);border-radius:var(--radius-sm);padding:12px;}
+.history-item .h-orig{font-size:.82rem;color:var(--dim);margin-bottom:4px;}
+.history-item .h-trans{font-family:'Alegreya',serif;font-size:1rem;line-height:1.35;}
+.history-item .h-time{font-size:.66rem;color:var(--dim);margin-top:6px;}
+.empty-hint{padding:20px 16px;color:var(--dim);font-size:.84rem;text-align:center;}
+.empty-hint[hidden]{display:none;}
+.clear-history-btn{margin:0 16px 10px;background:transparent;border:1px solid #322d40;color:var(--dim);border-radius:var(--radius-sm);padding:8px;font-size:.78rem;cursor:pointer;}
+
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:25;}
+.scrim[hidden]{display:none;}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--panel);color:var(--paper);padding:11px 18px;border-radius:999px;font-size:.83rem;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:88vw;text-align:center;border-left:3px solid var(--teal);}
+.toast.error{border-left-color:var(--danger);}
+.toast[hidden]{display:none;}
+
+@media (prefers-reduced-motion: reduce){.talk-btn.live{animation:none;}.zone,.panel,.talk-btn,.net-dot,.turn-dot{transition:none;}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <button id="settingsBtn" class="icon-btn" aria-label="Настройки">⚙</button>
+    <h1 class="wordmark">RU<span class="arrow">⇄</span>PT</h1>
+    <div id="netDot" class="net-dot" title="Статус сети" aria-hidden="true"></div>
+  </header>
+
+  <div class="stage">
+    <section id="zonePT" class="zone zone--pt">
+      <div class="zone-inner">
+        <div class="zone-label" id="labelPT">Português (Portugal)</div>
+        <div class="zone-status" id="statusPT">Prima e fale</div>
+        <div class="zone-phrase placeholder" id="phrasePT">A tradução vai aparecer aqui</div>
+        <button class="talk-btn talk-btn--pt" id="btnPT" aria-label="Falar">Falar</button>
+      </div>
+    </section>
+
+    <div class="center-rail">
+      <div class="turn-indicator">
+        <span class="turn-dot" id="turnDot"></span>
+        <span id="turnText">Готово к разговору</span>
+      </div>
+      <button id="nextTurnBtn" class="ghost-btn" hidden>Передать ход ⤾</button>
+    </div>
+
+    <section id="zoneRU" class="zone zone--ru">
+      <div class="zone-inner">
+        <div class="zone-label">Русский</div>
+        <div class="zone-status" id="statusRU">Нажмите и говорите</div>
+        <div class="zone-phrase placeholder" id="phraseRU">Здесь появится перевод</div>
+        <button class="talk-btn talk-btn--ru" id="btnRU" aria-label="Говорить">Говорить</button>
+      </div>
+    </section>
+  </div>
+
+  <footer class="bottombar">
+    <div class="mode-switch" role="group" aria-label="Режим">
+      <button class="mode-opt on" data-mode="ptt" id="modeBtnPtt">Рация</button>
+      <button class="mode-opt" data-mode="auto" id="modeBtnAuto">Авто</button>
+    </div>
+    <button id="autoToggleBtn" class="primary-btn" hidden>Начать разговор</button>
+    <button id="historyBtn" class="icon-btn" aria-label="История">☰</button>
+  </footer>
+</div>
+
+<aside id="historyPanel" class="panel" aria-hidden="true">
+  <div class="panel-head"><h2>История</h2><button id="closeHistory" class="icon-btn" aria-label="Закрыть">✕</button></div>
+  <button id="clearHistoryBtn" class="clear-history-btn">Очистить историю</button>
+  <div id="historyList" class="history-list"></div>
+  <p class="empty-hint" id="historyEmpty">Пока пусто — начните разговор</p>
+</aside>
+
+<aside id="settingsPanel" class="panel" aria-hidden="true">
+  <div class="panel-head"><h2>Настройки</h2><button id="closeSettings" class="icon-btn" aria-label="Закрыть">✕</button></div>
+  <div class="panel-body">
+    <label class="field">
+      <span>Ключ Google AI API</span>
+      <input type="password" id="apiKeyInput" placeholder="AIza…" autocomplete="off">
+    </label>
+    <p class="field-hint">Ключ хранится только в этом браузере и уходит напрямую в Google — я его не вижу и не сохраняю. Получить ключ: aistudio.google.com/app/apikey</p>
+
+    <div class="divider"></div>
+
+    <label class="field">
+      <span>Язык собеседника</span>
+      <select id="langB">
+        <option value="pt-PT">Português (Portugal)</option>
+        <option value="pt-BR">Português (Brasil)</option>
+        <option value="en">English</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="de">Deutsch</option>
+      </select>
+    </label>
+    <p class="field-hint">Ваш язык (Русский) зафиксирован — приложение проверено именно на этой паре.</p>
+
+    <div class="divider"></div>
+
+    <label class="field">
+      <span>Громкость озвучки: <output id="volOut">100%</output></span>
+      <input type="range" id="volSlider" min="0" max="200" value="100">
+    </label>
+
+    <label class="field">
+      <span>Чувствительность к тишине: <output id="silOut">средняя</output></span>
+      <input type="range" id="silSlider" min="1" max="10" value="4">
+    </label>
+    <p class="field-hint">Если приложение путает тишину с речью — сделайте ниже. Если обрезает начало фраз — сделайте выше.</p>
+
+    <label class="field">
+      <span>Пауза перед сменой хода (авто-режим): <output id="pauseOut">0.9с</output></span>
+      <input type="range" id="pauseSlider" min="400" max="2000" step="100" value="900">
+    </label>
+    <p class="field-hint">Как долго должна длиться тишина после речи, прежде чем ход перейдёт собеседнику.</p>
+
+    <div class="divider"></div>
+
+    <label class="field checkbox-field">
+      <input type="checkbox" id="debugToggle">
+      <span>Показывать журнал отладки</span>
+    </label>
+    <div id="debugLog" class="debug-log" hidden></div>
+  </div>
+</aside>
+
+<div id="toast" class="toast" hidden></div>
+<div id="scrim" class="scrim" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+var MODEL = 'gemini-3.5-live-translate-preview';
+var IN_RATE = 16000;
+var OUT_RATE = 24000;
+var GUARD_MIN_MS = 400, GUARD_MAX_MS = 1200;
+
+var LANG_META = {
+  'ru':    { label:'Русский',              speak:'Говорить', listening:'Слушаю…',        translating:'Перевожу…',  placeholder:'Здесь появится перевод',        waiting:'Нажмите и говорите',        waitingAuto:'Ожидание…' },
+  'pt-PT': { label:'Português (Portugal)', speak:'Falar',    listening:'A ouvir…',        translating:'A traduzir…', placeholder:'A tradução vai aparecer aqui',  waiting:'Prima e fale',              waitingAuto:'Aguardando…' },
+  'pt-BR': { label:'Português (Brasil)',   speak:'Falar',    listening:'Ouvindo…',         translating:'Traduzindo…', placeholder:'A tradução vai aparecer aqui',  waiting:'Pressione e fale',          waitingAuto:'Aguardando…' },
+  'en':    { label:'English',              speak:'Speak',    listening:'Listening…',      translating:'Translating…', placeholder:'Translation will appear here', waiting:'Press and speak',           waitingAuto:'Waiting…' },
+  'es':    { label:'Español',              speak:'Hablar',   listening:'Escuchando…',     translating:'Traduciendo…', placeholder:'La traducción aparecerá aquí', waiting:'Mantén pulsado y habla',    waitingAuto:'Esperando…' },
+  'fr':    { label:'Français',             speak:'Parler',   listening:'À l\u2019écoute…', translating:'Traduction…', placeholder:'La traduction apparaîtra ici', waiting:'Appuyez et parlez',         waitingAuto:'En attente…' },
+  'de':    { label:'Deutsch',              speak:'Sprechen', listening:'Höre zu…',        translating:'Übersetze…',  placeholder:'Die Übersetzung erscheint hier', waiting:'Drücken und sprechen',    waitingAuto:'Warten…' }
+};
+
+function $(id){ return document.getElementById(id); }
+var els = {
+  settingsBtn:$('settingsBtn'), historyBtn:$('historyBtn'),
+  settingsPanel:$('settingsPanel'), historyPanel:$('historyPanel'),
+  closeSettings:$('closeSettings'), closeHistory:$('closeHistory'), scrim:$('scrim'),
+  apiKeyInput:$('apiKeyInput'), langB:$('langB'), labelPT:$('labelPT'),
+  volSlider:$('volSlider'), volOut:$('volOut'),
+  silSlider:$('silSlider'), silOut:$('silOut'),
+  pauseSlider:$('pauseSlider'), pauseOut:$('pauseOut'),
+  debugToggle:$('debugToggle'), debugLog:$('debugLog'),
+  zonePT:$('zonePT'), zoneRU:$('zoneRU'),
+  statusPT:$('statusPT'), statusRU:$('statusRU'),
+  phrasePT:$('phrasePT'), phraseRU:$('phraseRU'),
+  btnPT:$('btnPT'), btnRU:$('btnRU'),
+  modeBtnPtt:$('modeBtnPtt'), modeBtnAuto:$('modeBtnAuto'),
+  autoToggleBtn:$('autoToggleBtn'), nextTurnBtn:$('nextTurnBtn'),
+  turnDot:$('turnDot'), turnText:$('turnText'),
+  historyList:$('historyList'), historyEmpty:$('historyEmpty'), clearHistoryBtn:$('clearHistoryBtn'),
+  toast:$('toast'), netDot:$('netDot')
+};
+
+var store = {
+  get: function(key, fb){ try{ var v = localStorage.getItem(key); return v===null ? fb : JSON.parse(v); }catch(e){ return fb; } },
+  set: function(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+};
+
+var settings = {
+  volume: store.get('rt_volume', 100),
+  silLevel: store.get('rt_silLevel', 4),
+  pauseMs: store.get('rt_pauseMs', 900),
+  langB: store.get('rt_langB', 'pt-PT')
+};
+var apiKey = localStorage.getItem('rt_apiKey') || '';
+var historyLog = store.get('rt_history', []);
+
+var SIL_RMS = {1:0.004,2:0.006,3:0.009,4:0.013,5:0.018,6:0.024,7:0.032,8:0.045,9:0.06,10:0.08};
+
+var mode = 'ptt';
+var appState = 'idle';
+var activeChannel = null, activeDirection = null;
+var micStream=null, micCtx=null, workletNode=null, playCtx=null, playQueue=null;
+var hasSpokenSinceActive=false, silenceMs=0, lastChunkHadAudio=false, lastAudioChunkTs=0;
+var curInputText='', curOutputText='';
+var autoRunning = false;
+
+function logDebug(msg){
+  var time = new Date().toLocaleTimeString();
+  var d = document.createElement('div');
+  d.textContent = '['+time+'] '+msg;
+  els.debugLog.appendChild(d);
+  while (els.debugLog.children.length > 150) els.debugLog.removeChild(els.debugLog.firstChild);
+  els.debugLog.scrollTop = els.debugLog.scrollHeight;
+}
+var toastTimer=null;
+function showToast(msg, kind){
+  els.toast.textContent = msg;
+  els.toast.className = 'toast' + (kind==='error' ? ' error' : '');
+  els.toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ els.toast.hidden = true; }, 4200);
+}
+function escapeHtml(s){ var d=document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function arrayBufferToBase64(buffer){
+  var bytes = new Uint8Array(buffer);
+  var binary = '';
+  var chunk = 0x8000;
+  for (var i=0; i<bytes.length; i+=chunk){
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i+chunk));
+  }
+  return btoa(binary);
+}
+function base64ToInt16(base64){
+  var binary = atob(base64);
+  var bytes = new Uint8Array(binary.length);
+  for (var i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
+  return new Int16Array(bytes.buffer);
+}
+
+function PlaybackQueue(ctx){
+  this.ctx = ctx;
+  this.nextStart = 0;
+  this.active = 0;
+  this.gain = ctx.createGain();
+  this.gain.connect(ctx.destination);
+}
+PlaybackQueue.prototype.setVolume = function(pct){ this.gain.gain.value = pct/100; };
+PlaybackQueue.prototype.enqueue = function(int16){
+  var f32 = new Float32Array(int16.length);
+  for (var i=0;i<int16.length;i++) f32[i] = int16[i]/32768;
+  var buf = this.ctx.createBuffer(1, f32.length, this.ctx.sampleRate);
+  buf.getChannelData(0).set(f32);
+  var src = this.ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(this.gain);
+  var now = this.ctx.currentTime;
+  var startAt = Math.max(now, this.nextStart);
+  src.start(startAt);
+  this.nextStart = startAt + buf.duration;
+  var self = this;
+  this.active++;
+  src.onended = function(){ self.active = Math.max(0, self.active-1); };
+};
+PlaybackQueue.prototype.isPlaying = function(){ return this.ctx.currentTime < this.nextStart - 0.02; };
+
+function TranslatorChannel(target, handlers){
+  this.target = target;
+  this.handlers = handlers || {};
+  this.ws = null;
+  this.ready = false;
+  this._settled = false;
+}
+TranslatorChannel.prototype.connect = function(){
+  var self = this;
+  return new Promise(function(resolve, reject){
+    var url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(apiKey);
+    var ws;
+    try { ws = new WebSocket(url); } catch(e){ reject(new Error('Не удалось открыть соединение')); return; }
+    self.ws = ws;
+
+    ws.onopen = function(){
+      var setupMsg = {
+        setup: {
+          model: 'models/' + MODEL,
+          generationConfig: {
+            responseModalities: ['AUDIO'],
+            inputAudioTranscription: {},
+            outputAudioTranscription: {},
+            translationConfig: {
+              targetLanguageCode: self.target,
+              echoTargetLanguage: false
+            }
+          }
+        }
+      };
+      ws.send(JSON.stringify(setupMsg));
+    };
+
+    ws.onmessage = function(event){
+      var handleText = function(text){
+        var msg;
+        try { msg = JSON.parse(text); } catch(e){ return; }
+        if (msg.setupComplete){
+          self.ready = true;
+          if (!self._settled){ self._settled = true; resolve(); }
+          return;
+        }
+        if (msg.serverContent){
+          var sc = msg.serverContent;
+          if (sc.inputTranscription && sc.inputTranscription.text){
+            self.handlers.onInput && self.handlers.onInput(sc.inputTranscription.text);
+          }
+          if (sc.outputTranscription && sc.outputTranscription.text){
+            self.handlers.onOutput && self.handlers.onOutput(sc.outputTranscription.text);
+          }
+          if (sc.modelTurn && sc.modelTurn.parts){
+            sc.modelTurn.parts.forEach(function(part){
+              if (part.inlineData && part.inlineData.data){
+                self.handlers.onAudio && self.handlers.onAudio(part.inlineData.data);
+              }
+            });
+          }
+        }
+        if (msg.error){
+          logDebug('Ошибка от сервера: ' + JSON.stringify(msg.error));
+        }
+      };
+      if (event.data instanceof Blob){
+        event.data.text().then(handleText).catch(function(){});
+      } else {
+        handleText(event.data);
+      }
+    };
+
+    ws.onerror = function(){
+      if (!self._settled){ self._settled = true; reject(new Error('Сетевая ошибка соединения')); }
+    };
+    ws.onclose = function(event){
+      self.ready = false;
+      if (!self._settled){
+        self._settled = true;
+        reject(new Error('Соединение закрыто (код ' + event.code + (event.reason ? ', ' + event.reason : '') + ')'));
+      }
+      self.handlers.onClose && self.handlers.onClose(event);
+    };
+  });
+};
+TranslatorChannel.prototype.sendAudio = function(base64){
+  if (this.ws && this.ws.readyState === WebSocket.OPEN && this.ready){
+    this.ws.send(JSON.stringify({ realtimeInput: { audio: { data: base64, mimeType: 'audio/pcm;rate=' + IN_RATE } } }));
+  }
+};
+TranslatorChannel.prototype.close = function(){
+  if (this.ws){ try{ this.ws.close(1000, 'done'); }catch(e){} }
+  this.ready = false;
+};
+
+var WORKLET_SRC = [
+'class MicProcessor extends AudioWorkletProcessor {',
+'  constructor(){ super(); this.buf = []; this.size = 1600; }',
+'  process(inputs){',
+'    var ch = inputs[0] && inputs[0][0];',
+'    if (ch){',
+'      for (var i=0;i<ch.length;i++) this.buf.push(ch[i]);',
+'      while (this.buf.length >= this.size){',
+'        var chunk = this.buf.splice(0, this.size);',
+'        var sum = 0;',
+'        var int16 = new Int16Array(chunk.length);',
+'        for (var j=0;j<chunk.length;j++){',
+'          var s = Math.max(-1, Math.min(1, chunk[j]));',
+'          int16[j] = s < 0 ? s * 0x8000 : s * 0x7FFF;',
+'          sum += chunk[j]*chunk[j];',
+'        }',
+'        var rms = Math.sqrt(sum / chunk.length);',
+'        this.port.postMessage({ pcm: int16.buffer, rms: rms }, [int16.buffer]);',
+'      }',
+'    }',
+'    return true;',
+'  }',
+'}',
+'registerProcessor(\'mic-processor\', MicProcessor);'
+].join('\n');
+
+function setupMic(){
+  return navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:false, channelCount:1 }
+  }).then(function(stream){
+    micStream = stream;
+    micCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: IN_RATE });
+    var ready = micCtx.state === 'suspended' ? micCtx.resume() : Promise.resolve();
+    return ready.then(function(){
+      var blobUrl = URL.createObjectURL(new Blob([WORKLET_SRC], { type:'application/javascript' }));
+      return micCtx.audioWorklet.addModule(blobUrl);
+    });
+  }).then(function(){
+    var source = micCtx.createMediaStreamSource(micStream);
+    workletNode = new AudioWorkletNode(micCtx, 'mic-processor');
+    source.connect(workletNode);
+    workletNode.port.onmessage = function(e){ handleMicChunk(e.data.pcm, e.data.rms); };
+    logDebug('Микрофон подключён.');
+  });
+}
+
+function ensureAudioReady(){
+  var p = micStream ? Promise.resolve() : setupMic();
+  return p.then(function(){
+    if (!playCtx){
+      playCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: OUT_RATE });
+      playQueue = new PlaybackQueue(playCtx);
+      playQueue.setVolume(settings.volume);
+    }
+    var r1 = playCtx.state === 'suspended' ? playCtx.resume() : Promise.resolve();
+    var r2 = micCtx.state === 'suspended' ? micCtx.resume() : Promise.resolve();
+    return Promise.all([r1, r2]);
+  });
+}
+
+function handleMicChunk(pcmBuffer, rms){
+  if (appState !== 'listening' || !activeChannel) return;
+  var threshold = SIL_RMS[settings.silLevel] || 0.013;
+  if (rms > threshold){
+    hasSpokenSinceActive = true;
+    silenceMs = 0;
+  } else if (hasSpokenSinceActive){
+    silenceMs += 100;
+  }
+  activeChannel.sendAudio(arrayBufferToBase64(pcmBuffer));
+  if (mode === 'auto' && hasSpokenSinceActive && silenceMs >= settings.pauseMs){
+    finishTurnAndSwitch();
+  }
+}
+
+function onAudioReceived(base64){
+  if (!playQueue) return;
+  playQueue.enqueue(base64ToInt16(base64));
+  lastAudioChunkTs = performance.now();
+  lastChunkHadAudio = true;
+}
+
+function targetForDirection(dir){ return dir === 'A' ? settings.langB : 'ru'; }
+
+function stopAndFinish(onDone){
+  appState = 'finishing';
+  renderState();
+  var finishStartTs = performance.now();
+  var done = false;
+  var poll = setInterval(function(){
+    var stillPlaying = playQueue && playQueue.isPlaying();
+    if (stillPlaying) return;
+    if (lastChunkHadAudio){
+      if (performance.now() - lastAudioChunkTs > 1200) finish();
+    } else {
+      if (performance.now() - finishStartTs > 3500) finish();
+    }
+  }, 150);
+  var hard = setTimeout(finish, 8000);
+  function finish(){
+    if (done) return;
+    done = true;
+    clearInterval(poll);
+    clearTimeout(hard);
+    onDone();
+  }
+}
+
+function commitTurnToHistory(dir){
+  if (curInputText.trim() || curOutputText.trim()){
+    var item = {
+      origLang: dir === 'A' ? 'ru' : settings.langB,
+      origText: curInputText.trim(),
+      transLang: dir === 'A' ? settings.langB : 'ru',
+      transText: curOutputText.trim(),
+      ts: Date.now()
+    };
+    historyLog.unshift(item);
+    if (historyLog.length > 15) historyLog.length = 15;
+    store.set('rt_history', historyLog);
+    renderHistory();
+  }
+  curInputText = ''; curOutputText = '';
+}
+
+function openChannelFor(dir){
+  appState = 'connecting';
+  renderState();
+  activeDirection = dir;
+  hasSpokenSinceActive = false; silenceMs = 0; lastChunkHadAudio = false;
+  curInputText = ''; curOutputText = '';
+  updatePhraseUI();
+  var target = targetForDirection(dir);
+  activeChannel = new TranslatorChannel(target, {
+    onInput: function(t){ curInputText += t; updatePhraseUI(); },
+    onOutput: function(t){ curOutputText += t; updatePhraseUI(); },
+    onAudio: onAudioReceived,
+    onClose: function(ev){
+      if (appState !== 'idle' && ev.code !== 1000){
+        logDebug('Канал закрылся неожиданно: код ' + ev.code);
+        showToast('Соединение прервалось. Попробуйте ещё раз.', 'error');
+        resetToIdle();
+      }
+    }
+  });
+  return activeChannel.connect().then(function(){
+    appState = 'listening';
+    logDebug('Канал открыт → цель ' + target);
+    renderState();
+  }).catch(function(e){
+    logDebug('Ошибка подключения: ' + e.message);
+    showToast('Не удалось подключиться: ' + e.message, 'error');
+    activeChannel = null;
+    appState = 'idle';
+    renderState();
+    throw e;
+  });
+}
+
+function closeActiveChannel(){ if (activeChannel){ activeChannel.close(); activeChannel = null; } }
+
+function resetToIdle(){
+  closeActiveChannel();
+  appState = 'idle';
+  activeDirection = null;
+  autoRunning = false;
+  renderState();
+}
+
+function finishTurnAndSwitch(){
+  if (appState !== 'listening') return;
+  var dir = activeDirection;
+  stopAndFinish(function(){
+    commitTurnToHistory(dir);
+    closeActiveChannel();
+    if (!autoRunning){ appState = 'idle'; renderState(); return; }
+    appState = 'switching';
+    renderState();
+    var guard = Math.min(GUARD_MAX_MS, Math.max(GUARD_MIN_MS, settings.pauseMs));
+    setTimeout(function(){
+      if (!autoRunning){ appState = 'idle'; renderState(); return; }
+      var nextDir = dir === 'A' ? 'B' : 'A';
+      openChannelFor(nextDir).catch(function(){ autoRunning = false; });
+    }, guard);
+  });
+}
+
+function onPttDown(dir){
+  if (mode !== 'ptt' || appState !== 'idle') return;
+  ensureAudioOrToast().then(function(ok){
+    if (!ok) return;
+    openChannelFor(dir).catch(function(){});
+  });
+}
+function onPttUp(dir){
+  if (mode !== 'ptt' || appState !== 'listening' || activeDirection !== dir) return;
+  if (!hasSpokenSinceActive){
+    showToast('Речь не обнаружена — попробуйте снова', null);
+    closeActiveChannel();
+    appState = 'idle';
+    renderState();
+    return;
+  }
+  var dirCopy = dir;
+  stopAndFinish(function(){
+    commitTurnToHistory(dirCopy);
+    closeActiveChannel();
+    appState = 'idle';
+    renderState();
+  });
+}
+
+function ensureAudioOrToast(){
+  if (!navigator.onLine){ showToast('Нет подключения к интернету', 'error'); return Promise.resolve(false); }
+  if (!apiKey){ showToast('Сначала укажите API-ключ в настройках', 'error'); openPanel(els.settingsPanel); return Promise.resolve(false); }
+  return ensureAudioReady().then(function(){ return true; }).catch(function(e){
+    showToast('Нет доступа к микрофону. Разрешите доступ и обновите страницу.', 'error');
+    logDebug('Ошибка микрофона: ' + e.message);
+    return false;
+  });
+}
+
+function toggleAuto(){
+  if (autoRunning){
+    autoRunning = false;
+    if (appState === 'listening'){
+      var dir = activeDirection;
+      stopAndFinish(function(){ commitTurnToHistory(dir); resetToIdle(); });
+    } else {
+      resetToIdle();
+    }
+    return;
+  }
+  ensureAudioOrToast().then(function(ok){
+    if (!ok) return;
+    autoRunning = true;
+    openChannelFor('A').catch(function(){ autoRunning = false; });
+  });
+}
+function manualNextTurn(){
+  if (mode === 'auto' && appState === 'listening'){
+    hasSpokenSinceActive = true;
+    finishTurnAndSwitch();
+  }
+}
+
+function renderState(){
+  var listeningA = appState === 'listening' && activeDirection === 'A';
+  var listeningB = appState === 'listening' && activeDirection === 'B';
+  var finishingA = appState === 'finishing' && activeDirection === 'A';
+  var finishingB = appState === 'finishing' && activeDirection === 'B';
+  var mRU = LANG_META['ru'], mPT = LANG_META[settings.langB] || LANG_META['pt-PT'];
+
+  els.zoneRU.classList.toggle('zone--active', listeningA || finishingA);
+  els.zonePT.classList.toggle('zone--active', listeningB || finishingB);
+  els.btnRU.classList.toggle('live', listeningA);
+  els.btnPT.classList.toggle('live', listeningB);
+  els.btnRU.classList.toggle('inactive-ptt', mode === 'ptt' && appState !== 'idle' && !listeningA);
+  els.btnPT.classList.toggle('inactive-ptt', mode === 'ptt' && appState !== 'idle' && !listeningB);
+
+  if (mode === 'ptt'){
+    els.statusRU.textContent = listeningA ? mRU.listening : finishingA ? mRU.translating : mRU.waiting;
+    els.statusPT.textContent = listeningB ? mPT.listening : finishingB ? mPT.translating : mPT.waiting;
+  } else {
+    els.statusRU.textContent = listeningA ? mRU.listening : finishingA ? mRU.translating : mRU.waitingAuto;
+    els.statusPT.textContent = listeningB ? mPT.listening : finishingB ? mPT.translating : mPT.waitingAuto;
+  }
+
+  els.turnDot.classList.toggle('on', appState === 'listening');
+  var turnLabels = {
+    idle: 'Готово к разговору', connecting: 'Подключаюсь…',
+    listening: activeDirection === 'A' ? 'Ход: русский → ' + mPT.label : 'Ход: ' + mPT.label + ' → русский',
+    finishing: 'Довожу перевод…', switching: 'Передаю ход…'
+  };
+  els.turnText.textContent = turnLabels[appState] || '';
+
+  els.nextTurnBtn.hidden = !(mode === 'auto' && autoRunning && appState === 'listening');
+  els.autoToggleBtn.hidden = mode !== 'auto';
+  els.autoToggleBtn.textContent = autoRunning ? 'Остановить' : 'Начать разговор';
+  els.autoToggleBtn.classList.toggle('stop', autoRunning);
+  els.btnRU.hidden = mode !== 'ptt';
+  els.btnPT.hidden = mode !== 'ptt';
+}
+
+function updatePhraseUI(){
+  var mPT = LANG_META[settings.langB] || LANG_META['pt-PT'];
+  if (activeDirection === 'A'){
+    els.phraseRU.textContent = curInputText || LANG_META['ru'].placeholder;
+    els.phraseRU.classList.toggle('placeholder', !curInputText);
+    els.phrasePT.textContent = curOutputText || '…';
+    els.phrasePT.classList.toggle('placeholder', !curOutputText);
+  } else if (activeDirection === 'B'){
+    els.phrasePT.textContent = curInputText || mPT.placeholder;
+    els.phrasePT.classList.toggle('placeholder', !curInputText);
+    els.phraseRU.textContent = curOutputText || '…';
+    els.phraseRU.classList.toggle('placeholder', !curOutputText);
+  }
+}
+
+function langShort(code){ return code === 'ru' ? 'RU' : (LANG_META[code] ? code.toUpperCase() : code.toUpperCase()); }
+function renderHistory(){
+  els.historyList.innerHTML = '';
+  els.historyEmpty.hidden = historyLog.length > 0;
+  historyLog.forEach(function(item){
+    var div = document.createElement('div');
+    div.className = 'history-item';
+    var time = new Date(item.ts).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    div.innerHTML =
+      '<div class="h-orig">' + langShort(item.origLang) + ' · ' + escapeHtml(item.origText) + '</div>' +
+      '<div class="h-trans">' + escapeHtml(item.transText) + '</div>' +
+      '<div class="h-time">' + langShort(item.transLang) + ' · ' + time + '</div>';
+    els.historyList.appendChild(div);
+  });
+}
+
+function openPanel(panel){ panel.classList.add('open'); panel.setAttribute('aria-hidden','false'); els.scrim.hidden = false; }
+function closePanels(){
+  els.settingsPanel.classList.remove('open'); els.historyPanel.classList.remove('open');
+  els.settingsPanel.setAttribute('aria-hidden','true'); els.historyPanel.setAttribute('aria-hidden','true');
+  els.scrim.hidden = true;
+}
+els.settingsBtn.addEventListener('click', function(){ openPanel(els.settingsPanel); });
+els.historyBtn.addEventListener('click', function(){ openPanel(els.historyPanel); });
+els.closeSettings.addEventListener('click', closePanels);
+els.closeHistory.addEventListener('click', closePanels);
+els.scrim.addEventListener('click', closePanels);
+els.clearHistoryBtn.addEventListener('click', function(){
+  historyLog = []; store.set('rt_history', historyLog); renderHistory();
+});
+
+els.apiKeyInput.value = apiKey;
+els.apiKeyInput.addEventListener('change', function(){
+  apiKey = els.apiKeyInput.value.trim();
+  localStorage.setItem('rt_apiKey', apiKey);
+});
+
+els.langB.value = settings.langB;
+function applyLangBLabel(){
+  var m = LANG_META[settings.langB] || LANG_META['pt-PT'];
+  els.labelPT.textContent = m.label;
+  els.btnPT.textContent = m.speak;
+  els.btnPT.setAttribute('aria-label', m.speak);
+  if (appState === 'idle') els.phrasePT.textContent = m.placeholder;
+}
+applyLangBLabel();
+els.langB.addEventListener('change', function(){
+  settings.langB = els.langB.value;
+  store.set('rt_langB', settings.langB);
+  applyLangBLabel();
+  renderState();
+});
+
+els.volSlider.value = settings.volume;
+els.volOut.textContent = settings.volume + '%';
+els.volSlider.addEventListener('input', function(){
+  settings.volume = Number(els.volSlider.value);
+  els.volOut.textContent = settings.volume + '%';
+  if (playQueue) playQueue.setVolume(settings.volume);
+  store.set('rt_volume', settings.volume);
+});
+
+function silLabel(v){ if (v<=3) return 'высокая (ловит тихое)'; if (v<=7) return 'средняя'; return 'низкая (только чёткая речь)'; }
+els.silSlider.value = settings.silLevel;
+els.silOut.textContent = silLabel(settings.silLevel);
+els.silSlider.addEventListener('input', function(){
+  settings.silLevel = Number(els.silSlider.value);
+  els.silOut.textContent = silLabel(settings.silLevel);
+  store.set('rt_silLevel', settings.silLevel);
+});
+
+els.pauseSlider.value = settings.pauseMs;
+els.pauseOut.textContent = (settings.pauseMs/1000).toFixed(1) + 'с';
+els.pauseSlider.addEventListener('input', function(){
+  settings.pauseMs = Number(els.pauseSlider.value);
+  els.pauseOut.textContent = (settings.pauseMs/1000).toFixed(1) + 'с';
+  store.set('rt_pauseMs', settings.pauseMs);
+});
+
+els.debugToggle.addEventListener('change', function(){ els.debugLog.hidden = !els.debugToggle.checked; });
+
+function setMode(m){
+  if (mode === m) return;
+  resetToIdle();
+  mode = m;
+  els.modeBtnPtt.classList.toggle('on', m === 'ptt');
+  els.modeBtnAuto.classList.toggle('on', m === 'auto');
+  renderState();
+}
+els.modeBtnPtt.addEventListener('click', function(){ setMode('ptt'); });
+els.modeBtnAuto.addEventListener('click', function(){ setMode('auto'); });
+
+['mousedown','touchstart'].forEach(function(ev){
+  els.btnRU.addEventListener(ev, function(e){ e.preventDefault(); onPttDown('A'); });
+  els.btnPT.addEventListener(ev, function(e){ e.preventDefault(); onPttDown('B'); });
+});
+['mouseup','touchend','mouseleave','touchcancel'].forEach(function(ev){
+  els.btnRU.addEventListener(ev, function(e){ e.preventDefault(); onPttUp('A'); });
+  els.btnPT.addEventListener(ev, function(e){ e.preventDefault(); onPttUp('B'); });
+});
+
+els.autoToggleBtn.addEventListener('click', toggleAuto);
+els.nextTurnBtn.addEventListener('click', manualNextTurn);
+
+window.addEventListener('online', function(){ els.netDot.classList.remove('offline'); });
+window.addEventListener('offline', function(){ els.netDot.classList.add('offline'); showToast('Пропало подключение к интернету', 'error'); });
+if (!navigator.onLine) els.netDot.classList.add('offline');
+
+window.addEventListener('beforeunload', function(){ closeActiveChannel(); });
+
+renderState();
+renderHistory();
+
+if ('serviceWorker' in navigator){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').catch(function(){});
+  });
+}
+
+})();
+</script>
+</body>
+</html>
