@@ -132,6 +132,7 @@ button, select, input{font-family:inherit;}
         <span id="turnText">Готово к разговору</span>
       </div>
       <button id="nextTurnBtn" class="ghost-btn" hidden>Передать ход ⤾</button>
+      <button id="replayBtn" class="ghost-btn" hidden>🔁 Повторить перевод</button>
     </div>
 
     <section id="zoneRU" class="zone zone--ru">
@@ -254,7 +255,7 @@ var els = {
   phrasePT:$('phrasePT'), phraseRU:$('phraseRU'),
   btnPT:$('btnPT'), btnRU:$('btnRU'),
   modeBtnPtt:$('modeBtnPtt'), modeBtnAuto:$('modeBtnAuto'),
-  autoToggleBtn:$('autoToggleBtn'), nextTurnBtn:$('nextTurnBtn'),
+  autoToggleBtn:$('autoToggleBtn'), nextTurnBtn:$('nextTurnBtn'), replayBtn:$('replayBtn'),
   turnDot:$('turnDot'), turnText:$('turnText'),
   historyList:$('historyList'), historyEmpty:$('historyEmpty'), clearHistoryBtn:$('clearHistoryBtn'),
   toast:$('toast'), netDot:$('netDot')
@@ -283,6 +284,9 @@ var micStream=null, micCtx=null, workletNode=null, playCtx=null, playQueue=null;
 var hasSpokenSinceActive=false, silenceMs=0, lastChunkHadAudio=false, lastAudioChunkTs=0;
 var curInputText='', curOutputText='';
 var autoRunning = false;
+var pendingChunks = [];      // mic audio captured while a channel is still connecting/switching, sent once ready
+var curTurnAudio = [];       // raw audio of the in-progress turn, for the "replay" button
+var lastTurnAudio = [];      // raw audio of the most recently completed turn
 
 function logDebug(msg){
   var time = new Date().toLocaleTimeString();
@@ -497,7 +501,7 @@ function ensureAudioReady(){
 }
 
 function handleMicChunk(pcmBuffer, rms){
-  if (appState !== 'listening' || !activeChannel) return;
+  if (appState === 'idle' || appState === 'finishing') return;
   var threshold = SIL_RMS[settings.silLevel] || 0.013;
   if (rms > threshold){
     hasSpokenSinceActive = true;
@@ -505,15 +509,24 @@ function handleMicChunk(pcmBuffer, rms){
   } else if (hasSpokenSinceActive){
     silenceMs += 100;
   }
-  activeChannel.sendAudio(arrayBufferToBase64(pcmBuffer));
-  if (mode === 'auto' && hasSpokenSinceActive && silenceMs >= settings.pauseMs){
-    finishTurnAndSwitch();
+  if (appState === 'connecting' || appState === 'switching'){
+    pendingChunks.push(pcmBuffer);
+    if (pendingChunks.length > 60) pendingChunks.shift(); // cap ~6s of buffering as a safety net
+    return;
+  }
+  if (appState === 'listening' && activeChannel){
+    activeChannel.sendAudio(arrayBufferToBase64(pcmBuffer));
+    if (mode === 'auto' && hasSpokenSinceActive && silenceMs >= settings.pauseMs){
+      finishTurnAndSwitch();
+    }
   }
 }
 
 function onAudioReceived(base64){
   if (!playQueue) return;
-  playQueue.enqueue(base64ToInt16(base64));
+  var int16 = base64ToInt16(base64);
+  playQueue.enqueue(int16);
+  curTurnAudio.push(int16);
   lastAudioChunkTs = performance.now();
   lastChunkHadAudio = true;
 }
@@ -545,6 +558,10 @@ function stopAndFinish(onDone){
 }
 
 function commitTurnToHistory(dir){
+  if (curTurnAudio.length){
+    lastTurnAudio = curTurnAudio;
+    els.replayBtn.hidden = false;
+  }
   if (curInputText.trim() || curOutputText.trim()){
     var item = {
       origLang: dir === 'A' ? 'ru' : settings.langB,
@@ -558,7 +575,7 @@ function commitTurnToHistory(dir){
     store.set('rt_history', historyLog);
     renderHistory();
   }
-  curInputText = ''; curOutputText = '';
+  curInputText = ''; curOutputText = ''; curTurnAudio = [];
 }
 
 function openChannelFor(dir){
@@ -566,7 +583,7 @@ function openChannelFor(dir){
   renderState();
   activeDirection = dir;
   hasSpokenSinceActive = false; silenceMs = 0; lastChunkHadAudio = false;
-  curInputText = ''; curOutputText = '';
+  curInputText = ''; curOutputText = ''; curTurnAudio = [];
   updatePhraseUI();
   var target = targetForDirection(dir);
   activeChannel = new TranslatorChannel(target, {
@@ -583,7 +600,10 @@ function openChannelFor(dir){
   });
   return activeChannel.connect().then(function(){
     appState = 'listening';
-    logDebug('Канал открыт → цель ' + target);
+    var toFlush = pendingChunks;
+    pendingChunks = [];
+    logDebug('Канал открыт → цель ' + target + (toFlush.length ? ('; отправляю ' + toFlush.length + ' буферизованных фрагм.') : ''));
+    toFlush.forEach(function(chunk){ activeChannel.sendAudio(arrayBufferToBase64(chunk)); });
     renderState();
   }).catch(function(e){
     logDebug('Ошибка подключения: ' + e.message);
@@ -602,7 +622,14 @@ function resetToIdle(){
   appState = 'idle';
   activeDirection = null;
   autoRunning = false;
+  pendingChunks = [];
   renderState();
+}
+
+function replayLastTurn(){
+  if (!lastTurnAudio.length || !playQueue){ showToast('Пока нечего повторить'); return; }
+  lastTurnAudio.forEach(function(int16){ playQueue.enqueue(int16); });
+  logDebug('Повтор последнего перевода (' + lastTurnAudio.length + ' фрагм.)');
 }
 
 function finishTurnAndSwitch(){
@@ -847,6 +874,7 @@ els.modeBtnAuto.addEventListener('click', function(){ setMode('auto'); });
 
 els.autoToggleBtn.addEventListener('click', toggleAuto);
 els.nextTurnBtn.addEventListener('click', manualNextTurn);
+els.replayBtn.addEventListener('click', replayLastTurn);
 
 window.addEventListener('online', function(){ els.netDot.classList.remove('offline'); });
 window.addEventListener('offline', function(){ els.netDot.classList.add('offline'); showToast('Пропало подключение к интернету', 'error'); });
