@@ -1,7 +1,7 @@
 // Минимальный service worker: кэширует оболочку приложения, чтобы оно
 // надёжно открывалось и было доступно для установки на домашний экран.
 // Сам перевод всегда требует интернета — офлайн кэшируется только интерфейс.
-var CACHE_NAME = 'ru-pt-translator-v4';
+var CACHE_NAME = 'ru-pt-translator-v5';
 var ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (event) {

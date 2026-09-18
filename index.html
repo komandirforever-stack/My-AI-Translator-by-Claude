@@ -93,6 +93,8 @@ button, select, input{font-family:inherit;}
 .panel-head h2{font-family:'Alegreya',serif;font-weight:600;font-size:1.15rem;}
 .panel-body{padding:0 16px 24px;overflow-y:auto;display:flex;flex-direction:column;gap:16px;}
 .field{display:flex;flex-direction:column;gap:6px;font-size:.84rem;color:var(--dim);}
+.field-row{display:flex;gap:10px;}
+.field-row .field{flex:1;min-width:0;}
 .field input[type="password"],.field select{background:var(--panel);border:1px solid #322d40;border-radius:var(--radius-sm);padding:10px 12px;color:var(--paper);font-size:.88rem;}
 .field input[type="range"]{accent-color:var(--teal);}
 .field-hint{font-size:.72rem;color:var(--dim);opacity:.8;margin-top:-8px;line-height:1.4;}
@@ -150,7 +152,7 @@ button, select, input{font-family:inherit;}
 
     <section id="zoneRU" class="zone zone--ru">
       <div class="zone-inner">
-        <div class="zone-label">Русский</div>
+        <div class="zone-label" id="labelRU">Русский</div>
         <div class="zone-status" id="statusRU">Нажмите и говорите</div>
         <div class="zone-phrase placeholder" id="phraseRU">Здесь появится перевод</div>
         <button class="replay-btn" id="replayBtnRU" hidden aria-label="Повторить перевод">🔁</button>
@@ -198,18 +200,17 @@ button, select, input{font-family:inherit;}
 
     <div class="divider"></div>
 
-    <label class="field">
-      <span>Язык собеседника</span>
-      <select id="langB">
-        <option value="pt-PT">Português (Portugal)</option>
-        <option value="pt-BR">Português (Brasil)</option>
-        <option value="en">English</option>
-        <option value="es">Español</option>
-        <option value="fr">Français</option>
-        <option value="de">Deutsch</option>
-      </select>
-    </label>
-    <p class="field-hint">Ваш язык (Русский) зафиксирован — приложение проверено именно на этой паре.</p>
+    <div class="field-row">
+      <label class="field">
+        <span>Мой язык</span>
+        <select id="langA"></select>
+      </label>
+      <label class="field">
+        <span>Язык собеседника</span>
+        <select id="langB"></select>
+      </label>
+    </div>
+    <p class="field-hint">По умолчанию — русский ↔ европейский португальский, пара, на которой всё проверялось подробнее всего.</p>
 
     <div class="divider"></div>
 
@@ -256,21 +257,26 @@ var OUT_RATE = 24000;
 var GUARD_MIN_MS = 400, GUARD_MAX_MS = 1200;
 
 var LANG_META = {
-  'ru':    { label:'Русский',              speak:'Говорить', listening:'Слушаю…',        translating:'Перевожу…',  placeholder:'Здесь появится перевод',        waiting:'Нажмите и говорите',        waitingAuto:'Ожидание…' },
-  'pt-PT': { label:'Português (Portugal)', speak:'Falar',    listening:'A ouvir…',        translating:'A traduzir…', placeholder:'A tradução vai aparecer aqui',  waiting:'Prima e fale',              waitingAuto:'Aguardando…' },
-  'pt-BR': { label:'Português (Brasil)',   speak:'Falar',    listening:'Ouvindo…',         translating:'Traduzindo…', placeholder:'A tradução vai aparecer aqui',  waiting:'Pressione e fale',          waitingAuto:'Aguardando…' },
-  'en':    { label:'English',              speak:'Speak',    listening:'Listening…',      translating:'Translating…', placeholder:'Translation will appear here', waiting:'Press and speak',           waitingAuto:'Waiting…' },
-  'es':    { label:'Español',              speak:'Hablar',   listening:'Escuchando…',     translating:'Traduciendo…', placeholder:'La traducción aparecerá aquí', waiting:'Mantén pulsado y habla',    waitingAuto:'Esperando…' },
-  'fr':    { label:'Français',             speak:'Parler',   listening:'À l\u2019écoute…', translating:'Traduction…', placeholder:'La traduction apparaîtra ici', waiting:'Appuyez et parlez',         waitingAuto:'En attente…' },
-  'de':    { label:'Deutsch',              speak:'Sprechen', listening:'Höre zu…',        translating:'Übersetze…',  placeholder:'Die Übersetzung erscheint hier', waiting:'Drücken und sprechen',    waitingAuto:'Warten…' }
+  'ru':    { label:'Русский',              speak:'Говорить', listening:'Слушаю…',        translating:'Перевожу…',   placeholder:'Здесь появится перевод',         waiting:'Нажмите и говорите',       waitingAuto:'Ожидание…' },
+  'pt-PT': { label:'Português (Portugal)', speak:'Falar',    listening:'A ouvir…',        translating:'A traduzir…', placeholder:'A tradução vai aparecer aqui',   waiting:'Prima e fale',             waitingAuto:'Aguardando…' },
+  'pt-BR': { label:'Português (Brasil)',   speak:'Falar',    listening:'Ouvindo…',        translating:'Traduzindo…', placeholder:'A tradução vai aparecer aqui',   waiting:'Pressione e fale',         waitingAuto:'Aguardando…' },
+  'en':    { label:'English',              speak:'Speak',    listening:'Listening…',      translating:'Translating…', placeholder:'Translation will appear here', waiting:'Press and speak',          waitingAuto:'Waiting…' },
+  'es':    { label:'Español',              speak:'Hablar',   listening:'Escuchando…',     translating:'Traduciendo…', placeholder:'La traducción aparecerá aquí', waiting:'Mantén pulsado y habla',   waitingAuto:'Esperando…' },
+  'fr':    { label:'Français',             speak:'Parler',   listening:'À l\u2019écoute…', translating:'Traduction…', placeholder:'La traduction apparaîtra ici', waiting:'Appuyez et parlez',        waitingAuto:'En attente…' },
+  'de':    { label:'Deutsch',              speak:'Sprechen', listening:'Höre zu…',        translating:'Übersetze…',  placeholder:'Die Übersetzung erscheint hier', waiting:'Drücken und sprechen',   waitingAuto:'Warten…' },
+  'it':    { label:'Italiano',             speak:'Parla',    listening:'Ascolto…',        translating:'Traduzione…', placeholder:'La traduzione apparirà qui',   waiting:'Tieni premuto e parla',    waitingAuto:'In attesa…' },
+  'uk':    { label:'Українська',           speak:'Говорити', listening:'Слухаю…',         translating:'Перекладаю…', placeholder:'Тут з\u2019явиться переклад',  waiting:'Натисніть і говоріть',     waitingAuto:'Очікування…' },
+  'pl':    { label:'Polski',               speak:'Mów',      listening:'Słucham…',        translating:'Tłumaczę…',   placeholder:'Tutaj pojawi się tłumaczenie', waiting:'Naciśnij i mów',           waitingAuto:'Oczekiwanie…' },
+  'nl':    { label:'Nederlands',           speak:'Spreken',  listening:'Luisteren…',      translating:'Vertalen…',   placeholder:'De vertaling verschijnt hier', waiting:'Ingedrukt houden, spreken', waitingAuto:'Wachten…' }
 };
+var LANG_ORDER = ['ru','pt-PT','pt-BR','en','es','fr','de','it','uk','pl','nl'];
 
 function $(id){ return document.getElementById(id); }
 var els = {
   settingsBtn:$('settingsBtn'), historyBtn:$('historyBtn'),
   settingsPanel:$('settingsPanel'), historyPanel:$('historyPanel'),
   closeSettings:$('closeSettings'), closeHistory:$('closeHistory'), scrim:$('scrim'),
-  apiKeyInput:$('apiKeyInput'), langB:$('langB'), labelPT:$('labelPT'),
+  apiKeyInput:$('apiKeyInput'), langA:$('langA'), langB:$('langB'), labelPT:$('labelPT'), labelRU:$('labelRU'),
   volSlider:$('volSlider'), volOut:$('volOut'),
   silSlider:$('silSlider'), silOut:$('silOut'),
   pauseSlider:$('pauseSlider'), pauseOut:$('pauseOut'),
@@ -296,8 +302,9 @@ var store = {
 
 var settings = {
   volume: store.get('rt_volume', 100),
-  silDb: store.get('rt_silDb', -32),
-  pauseMs: store.get('rt_pauseMs', 900),
+  silDb: store.get('rt_silDb', -40),
+  pauseMs: store.get('rt_pauseMs', 1000),
+  langA: store.get('rt_langA', 'ru'),
   langB: store.get('rt_langB', 'pt-PT')
 };
 var apiKey = localStorage.getItem('rt_apiKey') || '';
@@ -365,7 +372,8 @@ PlaybackQueue.prototype.enqueue = function(int16){
   src.buffer = buf;
   src.connect(this.gain);
   var now = this.ctx.currentTime;
-  var startAt = Math.max(now, this.nextStart);
+  var wasIdle = this.nextStart <= now;
+  var startAt = wasIdle ? (now + 0.06) : Math.max(now, this.nextStart);
   src.start(startAt);
   this.nextStart = startAt + buf.duration;
   var self = this;
@@ -542,8 +550,9 @@ function handleMicChunk(pcmBuffer, rms){
   }
   if (appState === 'listening' && activeChannel){
     activeChannel.sendAudio(arrayBufferToBase64(pcmBuffer));
-    if (mode === 'auto' && hasSpokenSinceActive && silenceMs >= settings.pauseMs){
-      finishTurnAndSwitch();
+    if (hasSpokenSinceActive && silenceMs >= settings.pauseMs){
+      if (mode === 'auto') finishTurnAndSwitch();
+      else if (mode === 'ptt') finishPtt(activeDirection);
     }
   }
 }
@@ -557,7 +566,7 @@ function onAudioReceived(base64){
   lastChunkHadAudio = true;
 }
 
-function targetForDirection(dir){ return dir === 'A' ? settings.langB : 'ru'; }
+function targetForDirection(dir){ return dir === 'A' ? settings.langB : settings.langA; }
 
 function stopAndFinish(onDone, opts){
   var maxNoAudioWait = (opts && opts.maxNoAudioWait != null) ? opts.maxNoAudioWait : 3500;
@@ -586,15 +595,15 @@ function stopAndFinish(onDone, opts){
 
 function commitTurnToHistory(dir){
   if (curTurnAudio.length){
-    lastTurnAudio = curTurnAudio;
+    lastTurnAudio = curTurnAudio.slice();
     els.replayBtnRU.hidden = false;
     els.replayBtnPT.hidden = false;
   }
   if (curInputText.trim() || curOutputText.trim()){
     var item = {
-      origLang: dir === 'A' ? 'ru' : settings.langB,
+      origLang: dir === 'A' ? settings.langA : settings.langB,
       origText: curInputText.trim(),
-      transLang: dir === 'A' ? settings.langB : 'ru',
+      transLang: dir === 'A' ? settings.langB : settings.langA,
       transText: curOutputText.trim(),
       ts: Date.now()
     };
@@ -654,14 +663,26 @@ function resetToIdle(){
   renderState();
 }
 
+var isReplaying = false;
+var replayEndTimer = null;
 function replayLastTurn(){
   if (!lastTurnAudio.length || !playQueue){ showToast('Пока нечего повторить'); return; }
   if (appState === 'connecting' || appState === 'listening'){
     showToast('Секунду — сначала завершится текущая реплика', null);
     return;
   }
-  lastTurnAudio.forEach(function(int16){ playQueue.enqueue(int16); });
-  logDebug('Повтор последнего перевода (' + lastTurnAudio.length + ' фрагм.)');
+  isReplaying = true;
+  var totalSec = 0;
+  lastTurnAudio.forEach(function(int16){ playQueue.enqueue(int16); totalSec += int16.length / OUT_RATE; });
+  logDebug('Повтор последнего перевода (' + lastTurnAudio.length + ' фрагм., ~' + totalSec.toFixed(1) + 'с)');
+  clearTimeout(replayEndTimer);
+  replayEndTimer = setTimeout(function(){ isReplaying = false; }, Math.ceil(totalSec * 1000) + 300);
+}
+
+function proceedToOpenChannel(nextDir){
+  if (isReplaying){ setTimeout(function(){ proceedToOpenChannel(nextDir); }, 200); return; }
+  if (!autoRunning){ appState = 'idle'; renderState(); return; }
+  openChannelFor(nextDir).catch(function(){ autoRunning = false; });
 }
 
 function finishTurnAndSwitch(opts){
@@ -677,9 +698,20 @@ function finishTurnAndSwitch(opts){
     setTimeout(function(){
       if (!autoRunning){ appState = 'idle'; renderState(); return; }
       var nextDir = dir === 'A' ? 'B' : 'A';
-      openChannelFor(nextDir).catch(function(){ autoRunning = false; });
+      proceedToOpenChannel(nextDir);
     }, guard);
   }, opts);
+}
+
+function finishPtt(dir){
+  if (mode !== 'ptt' || appState !== 'listening' || activeDirection !== dir) return;
+  var dirCopy = dir;
+  stopAndFinish(function(){
+    commitTurnToHistory(dirCopy);
+    closeActiveChannel();
+    appState = 'idle';
+    renderState();
+  });
 }
 
 function onPttDown(dir){
@@ -698,13 +730,7 @@ function onPttUp(dir){
     renderState();
     return;
   }
-  var dirCopy = dir;
-  stopAndFinish(function(){
-    commitTurnToHistory(dirCopy);
-    closeActiveChannel();
-    appState = 'idle';
-    renderState();
-  });
+  finishPtt(dir);
 }
 
 function ensureAudioOrToast(){
@@ -747,7 +773,7 @@ function renderState(){
   var listeningB = appState === 'listening' && activeDirection === 'B';
   var finishingA = appState === 'finishing' && activeDirection === 'A';
   var finishingB = appState === 'finishing' && activeDirection === 'B';
-  var mRU = LANG_META['ru'], mPT = LANG_META[settings.langB] || LANG_META['pt-PT'];
+  var mRU = LANG_META[settings.langA] || LANG_META['ru'], mPT = LANG_META[settings.langB] || LANG_META['pt-PT'];
 
   els.zoneRU.classList.toggle('zone--active', listeningA || finishingA);
   els.zonePT.classList.toggle('zone--active', listeningB || finishingB);
@@ -765,10 +791,10 @@ function renderState(){
   }
 
   els.turnDot.classList.toggle('on', appState === 'listening');
-  var finishingLabel = activeDirection === 'A' ? 'Довожу: русский → ' + mPT.label + '…' : 'Довожу: ' + mPT.label + ' → русский…';
+  var finishingLabel = activeDirection === 'A' ? ('Довожу: ' + mRU.label + ' → ' + mPT.label + '…') : ('Довожу: ' + mPT.label + ' → ' + mRU.label + '…');
   var turnLabels = {
     idle: 'Готово к разговору', connecting: 'Подключаюсь…',
-    listening: activeDirection === 'A' ? 'Ход: русский → ' + mPT.label : 'Ход: ' + mPT.label + ' → русский',
+    listening: activeDirection === 'A' ? ('Ход: ' + mRU.label + ' → ' + mPT.label) : ('Ход: ' + mPT.label + ' → ' + mRU.label),
     finishing: finishingLabel, switching: 'Передаю ход…'
   };
   els.turnText.textContent = turnLabels[appState] || '';
@@ -782,9 +808,10 @@ function renderState(){
 }
 
 function updatePhraseUI(){
+  var mRU = LANG_META[settings.langA] || LANG_META['ru'];
   var mPT = LANG_META[settings.langB] || LANG_META['pt-PT'];
   if (activeDirection === 'A'){
-    els.phraseRU.textContent = curInputText || LANG_META['ru'].placeholder;
+    els.phraseRU.textContent = curInputText || mRU.placeholder;
     els.phraseRU.classList.toggle('placeholder', !curInputText);
     els.phrasePT.textContent = curOutputText || '…';
     els.phrasePT.classList.toggle('placeholder', !curOutputText);
@@ -796,7 +823,7 @@ function updatePhraseUI(){
   }
 }
 
-function langShort(code){ return code === 'ru' ? 'RU' : (LANG_META[code] ? code.toUpperCase() : code.toUpperCase()); }
+function langShort(code){ return LANG_META[code] ? code.split('-')[0].toUpperCase() : code.toUpperCase(); }
 function renderHistory(){
   els.historyList.innerHTML = '';
   els.historyEmpty.hidden = historyLog.length > 0;
@@ -833,20 +860,45 @@ els.apiKeyInput.addEventListener('change', function(){
   localStorage.setItem('rt_apiKey', apiKey);
 });
 
-els.langB.value = settings.langB;
-function applyLangBLabel(){
-  var m = LANG_META[settings.langB] || LANG_META['pt-PT'];
-  els.labelPT.textContent = m.label;
-  els.btnPT.textContent = m.speak;
-  els.btnPT.setAttribute('aria-label', m.speak);
-  if (appState === 'idle') els.phrasePT.textContent = m.placeholder;
+function populateLangSelect(sel, selected){
+  sel.innerHTML = '';
+  LANG_ORDER.forEach(function(code){
+    var opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = LANG_META[code].label;
+    if (code === selected) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+populateLangSelect(els.langA, settings.langA);
+populateLangSelect(els.langB, settings.langB);
+
+function applyLangLabels(){
+  var mA = LANG_META[settings.langA] || LANG_META['ru'];
+  var mB = LANG_META[settings.langB] || LANG_META['pt-PT'];
+  els.labelRU.textContent = mA.label;
+  els.btnRU.textContent = mA.speak;
+  els.btnRU.setAttribute('aria-label', mA.speak);
+  els.labelPT.textContent = mB.label;
+  els.btnPT.textContent = mB.speak;
+  els.btnPT.setAttribute('aria-label', mB.speak);
+  if (appState === 'idle'){
+    els.phraseRU.textContent = mA.placeholder;
+    els.phrasePT.textContent = mB.placeholder;
+  }
   if (typeof updateTextDirUI === 'function') updateTextDirUI();
 }
-applyLangBLabel();
+applyLangLabels();
+els.langA.addEventListener('change', function(){
+  settings.langA = els.langA.value;
+  store.set('rt_langA', settings.langA);
+  applyLangLabels();
+  renderState();
+});
 els.langB.addEventListener('change', function(){
   settings.langB = els.langB.value;
   store.set('rt_langB', settings.langB);
-  applyLangBLabel();
+  applyLangLabels();
   renderState();
 });
 
@@ -901,11 +953,16 @@ els.modeBtnPtt.addEventListener('click', function(){ setMode('ptt'); });
 els.modeBtnAuto.addEventListener('click', function(){ setMode('auto'); });
 els.modeBtnText.addEventListener('click', function(){ setMode('text'); });
 
-['mousedown','touchstart'].forEach(function(ev){
-  els.btnRU.addEventListener(ev, function(e){ e.preventDefault(); onPttDown('A'); });
-  els.btnPT.addEventListener(ev, function(e){ e.preventDefault(); onPttDown('B'); });
+var pttMouseDown = { A:false, B:false };
+els.btnRU.addEventListener('mousedown', function(e){ e.preventDefault(); pttMouseDown.A = true; onPttDown('A'); });
+els.btnPT.addEventListener('mousedown', function(e){ e.preventDefault(); pttMouseDown.B = true; onPttDown('B'); });
+window.addEventListener('mouseup', function(){
+  if (pttMouseDown.A){ pttMouseDown.A = false; onPttUp('A'); }
+  if (pttMouseDown.B){ pttMouseDown.B = false; onPttUp('B'); }
 });
-['mouseup','touchend','mouseleave','touchcancel'].forEach(function(ev){
+els.btnRU.addEventListener('touchstart', function(e){ e.preventDefault(); onPttDown('A'); });
+els.btnPT.addEventListener('touchstart', function(e){ e.preventDefault(); onPttDown('B'); });
+['touchend','touchcancel'].forEach(function(ev){
   els.btnRU.addEventListener(ev, function(e){ e.preventDefault(); onPttUp('A'); });
   els.btnPT.addEventListener(ev, function(e){ e.preventDefault(); onPttUp('B'); });
 });
@@ -916,11 +973,12 @@ els.replayBtnRU.addEventListener('click', replayLastTurn);
 els.replayBtnPT.addEventListener('click', replayLastTurn);
 
 var TEXT_MODEL = 'gemini-3.1-flash-lite';
-var textDirForward = true; // true: русский -> langB ; false: langB -> русский
+var textDirForward = true; // true: langA -> langB ; false: langB -> langA
 
 function updateTextDirUI(){
-  var mPT = LANG_META[settings.langB] || LANG_META['pt-PT'];
-  els.textDirBtn.textContent = textDirForward ? ('Русский → ' + mPT.label) : (mPT.label + ' → Русский');
+  var mA = LANG_META[settings.langA] || LANG_META['ru'];
+  var mB = LANG_META[settings.langB] || LANG_META['pt-PT'];
+  els.textDirBtn.textContent = textDirForward ? (mA.label + ' → ' + mB.label) : (mB.label + ' → ' + mA.label);
 }
 els.textDirBtn.addEventListener('click', function(){
   textDirForward = !textDirForward;
@@ -929,7 +987,7 @@ els.textDirBtn.addEventListener('click', function(){
 updateTextDirUI();
 
 function currentTextLangs(){
-  return textDirForward ? { fromCode:'ru', toCode:settings.langB } : { fromCode:settings.langB, toCode:'ru' };
+  return textDirForward ? { fromCode:settings.langA, toCode:settings.langB } : { fromCode:settings.langB, toCode:settings.langA };
 }
 
 els.textTranslateBtn.addEventListener('click', function(){
@@ -944,9 +1002,16 @@ els.textTranslateBtn.addEventListener('click', function(){
   els.textOutput.classList.add('placeholder');
   els.textOutputCopy.hidden = true;
   els.textTranslateBtn.disabled = true;
-  var prompt = 'Переведи текст ниже с языка "' + fromLabel + '" на язык "' + toLabel +
-    '". Если целевой язык — европейский португальский (Portugal), используй только его нормы, ни в коем случае не бразильские. ' +
-    'В ответе выведи только сам перевод, без кавычек и пояснений.\n\nТекст:\n' + text;
+  var ptPtNote = '';
+  if (langs.toCode === 'pt-PT'){
+    ptPtNote = ' ОБЯЗАТЕЛЬНО переводи на европейский португальский язык Португалии, а НЕ на бразильский вариант — это критически важное требование. ' +
+      'Используй лексику и нормы Португалии, например: "comboio" (а не "trem"), "autocarro" (а не "ônibus"), "pequeno-almoço" (а не "café da manhã"), ' +
+      '"casa de banho" (а не "banheiro"), "telemóvel" (а не "celular"). Перевод должен звучать так, как говорят в Лиссабоне, а не в Сан-Паулу или Рио.';
+  } else if (langs.toCode === 'pt-BR'){
+    ptPtNote = ' Переводи именно на бразильский вариант португальского (Brasil), а не на европейский.';
+  }
+  var prompt = 'Переведи текст ниже с языка "' + fromLabel + '" на язык "' + toLabel + '".' + ptPtNote +
+    ' В ответе выведи только сам перевод — без кавычек, без пояснений, без вариантов.\n\nТекст:\n' + text;
   fetch('https://generativelanguage.googleapis.com/v1beta/models/' + TEXT_MODEL + ':generateContent?key=' + encodeURIComponent(apiKey), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
