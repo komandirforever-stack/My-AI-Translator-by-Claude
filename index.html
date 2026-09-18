@@ -40,6 +40,7 @@ button, select, input{font-family:inherit;}
 .net-dot.offline{background:var(--danger);box-shadow:0 0 8px var(--danger);}
 
 .stage{flex:1;display:flex;flex-direction:column;min-height:0;padding:0 14px;gap:10px;}
+.stage[hidden]{display:none;}
 .zone{flex:1;border-radius:var(--radius-lg);background:var(--panel);display:flex;min-height:0;position:relative;transition:box-shadow .4s ease;}
 .zone--pt{transform:rotate(180deg);}
 .zone-inner{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;gap:10px;min-height:0;width:100%;}
@@ -58,6 +59,9 @@ button, select, input{font-family:inherit;}
 .zone--active{box-shadow:0 0 0 1.5px var(--zone-accent) inset, 0 0 34px -6px var(--zone-accent);}
 .zone--ru{--zone-accent:var(--amber);}
 .zone--pt{--zone-accent:var(--teal);}
+.replay-btn{width:56px;height:56px;border-radius:50%;border:1.5px solid #3a3450;background:var(--panel-2);color:var(--paper);font-size:1.4rem;cursor:pointer;flex-shrink:0;line-height:1;}
+.replay-btn:active{transform:scale(.92);}
+.replay-btn[hidden]{display:none;}
 
 .center-rail{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0;}
 .turn-indicator{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--dim);}
@@ -65,6 +69,15 @@ button, select, input{font-family:inherit;}
 .turn-dot.on{background:var(--ok);box-shadow:0 0 6px var(--ok);}
 .ghost-btn{border:1px solid #322d40;background:transparent;color:var(--dim);border-radius:999px;padding:6px 14px;font-size:.78rem;cursor:pointer;}
 .ghost-btn[hidden]{display:none;}
+
+.text-mode-panel{flex:1;display:flex;flex-direction:column;padding:14px;gap:12px;min-height:0;}
+.text-mode-panel[hidden]{display:none;}
+.text-dir-btn{align-self:center;}
+.text-input{background:var(--panel);border:1px solid #322d40;border-radius:var(--radius-md);padding:14px;color:var(--paper);font-size:1rem;resize:vertical;min-height:96px;}
+.text-translate-btn{width:100%;padding:13px;}
+.text-output-wrap{flex:1;display:flex;flex-direction:column;gap:8px;min-height:0;}
+.text-output{flex:1;background:var(--panel);border-radius:var(--radius-md);padding:14px;font-family:'Alegreya',serif;font-size:1.2rem;line-height:1.4;overflow-y:auto;min-height:80px;}
+.text-output.placeholder{color:var(--dim);font-style:italic;font-family:'Golos Text',sans-serif;font-size:.95rem;}
 
 .bottombar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;flex-shrink:0;}
 .mode-switch{display:flex;background:var(--panel);border-radius:999px;padding:3px;flex-shrink:0;}
@@ -116,12 +129,13 @@ button, select, input{font-family:inherit;}
     <div id="netDot" class="net-dot" title="Статус сети" aria-hidden="true"></div>
   </header>
 
-  <div class="stage">
+  <div class="stage" id="stage">
     <section id="zonePT" class="zone zone--pt">
       <div class="zone-inner">
         <div class="zone-label" id="labelPT">Português (Portugal)</div>
         <div class="zone-status" id="statusPT">Prima e fale</div>
         <div class="zone-phrase placeholder" id="phrasePT">A tradução vai aparecer aqui</div>
+        <button class="replay-btn" id="replayBtnPT" hidden aria-label="Repetir tradução">🔁</button>
         <button class="talk-btn talk-btn--pt" id="btnPT" aria-label="Falar">Falar</button>
       </div>
     </section>
@@ -132,7 +146,6 @@ button, select, input{font-family:inherit;}
         <span id="turnText">Готово к разговору</span>
       </div>
       <button id="nextTurnBtn" class="ghost-btn" hidden>Передать ход ⤾</button>
-      <button id="replayBtn" class="ghost-btn" hidden>🔁 Повторить перевод</button>
     </div>
 
     <section id="zoneRU" class="zone zone--ru">
@@ -140,15 +153,27 @@ button, select, input{font-family:inherit;}
         <div class="zone-label">Русский</div>
         <div class="zone-status" id="statusRU">Нажмите и говорите</div>
         <div class="zone-phrase placeholder" id="phraseRU">Здесь появится перевод</div>
+        <button class="replay-btn" id="replayBtnRU" hidden aria-label="Повторить перевод">🔁</button>
         <button class="talk-btn talk-btn--ru" id="btnRU" aria-label="Говорить">Говорить</button>
       </div>
     </section>
+  </div>
+
+  <div id="textModePanel" class="text-mode-panel" hidden>
+    <button id="textDirBtn" class="ghost-btn text-dir-btn">Русский → Português (Portugal)</button>
+    <textarea id="textInput" class="text-input" placeholder="Введите текст для перевода…" rows="5"></textarea>
+    <button id="textTranslateBtn" class="primary-btn text-translate-btn">Перевести</button>
+    <div class="text-output-wrap">
+      <div id="textOutput" class="text-output placeholder">Перевод появится здесь</div>
+      <button id="textOutputCopy" class="ghost-btn" hidden>Копировать перевод</button>
+    </div>
   </div>
 
   <footer class="bottombar">
     <div class="mode-switch" role="group" aria-label="Режим">
       <button class="mode-opt on" data-mode="ptt" id="modeBtnPtt">Рация</button>
       <button class="mode-opt" data-mode="auto" id="modeBtnAuto">Авто</button>
+      <button class="mode-opt" data-mode="text" id="modeBtnText">Текст</button>
     </div>
     <button id="autoToggleBtn" class="primary-btn" hidden>Начать разговор</button>
     <button id="historyBtn" class="icon-btn" aria-label="История">☰</button>
@@ -194,10 +219,10 @@ button, select, input{font-family:inherit;}
     </label>
 
     <label class="field">
-      <span>Чувствительность к тишине: <output id="silOut">средняя</output></span>
-      <input type="range" id="silSlider" min="1" max="10" value="4">
+      <span>Порог тишины: <output id="silOut">−32 дБ</output></span>
+      <input type="range" id="silSlider" min="-50" max="-15" value="-32" step="1">
     </label>
-    <p class="field-hint">Если приложение путает тишину с речью — сделайте ниже. Если обрезает начало фраз — сделайте выше.</p>
+    <p class="field-hint">Всё громче порога считается речью и записывается; всё тише — тишиной и отсекается. Ловит фоновый шум → двигайте к −15. Обрезает тихие фразы → двигайте к −50.</p>
 
     <label class="field">
       <span>Пауза перед сменой хода (авто-режим): <output id="pauseOut">0.9с</output></span>
@@ -250,14 +275,17 @@ var els = {
   silSlider:$('silSlider'), silOut:$('silOut'),
   pauseSlider:$('pauseSlider'), pauseOut:$('pauseOut'),
   debugToggle:$('debugToggle'), debugLog:$('debugLog'), debugLogWrap:$('debugLogWrap'), copyLogBtn:$('copyLogBtn'),
-  zonePT:$('zonePT'), zoneRU:$('zoneRU'),
+  stage:$('stage'), zonePT:$('zonePT'), zoneRU:$('zoneRU'),
   statusPT:$('statusPT'), statusRU:$('statusRU'),
   phrasePT:$('phrasePT'), phraseRU:$('phraseRU'),
   btnPT:$('btnPT'), btnRU:$('btnRU'),
-  modeBtnPtt:$('modeBtnPtt'), modeBtnAuto:$('modeBtnAuto'),
-  autoToggleBtn:$('autoToggleBtn'), nextTurnBtn:$('nextTurnBtn'), replayBtn:$('replayBtn'),
+  replayBtnRU:$('replayBtnRU'), replayBtnPT:$('replayBtnPT'),
+  modeBtnPtt:$('modeBtnPtt'), modeBtnAuto:$('modeBtnAuto'), modeBtnText:$('modeBtnText'),
+  autoToggleBtn:$('autoToggleBtn'), nextTurnBtn:$('nextTurnBtn'),
   turnDot:$('turnDot'), turnText:$('turnText'),
   historyList:$('historyList'), historyEmpty:$('historyEmpty'), clearHistoryBtn:$('clearHistoryBtn'),
+  textModePanel:$('textModePanel'), textDirBtn:$('textDirBtn'), textInput:$('textInput'),
+  textTranslateBtn:$('textTranslateBtn'), textOutput:$('textOutput'), textOutputCopy:$('textOutputCopy'),
   toast:$('toast'), netDot:$('netDot')
 };
 
@@ -268,14 +296,12 @@ var store = {
 
 var settings = {
   volume: store.get('rt_volume', 100),
-  silLevel: store.get('rt_silLevel', 4),
+  silDb: store.get('rt_silDb', -32),
   pauseMs: store.get('rt_pauseMs', 900),
   langB: store.get('rt_langB', 'pt-PT')
 };
 var apiKey = localStorage.getItem('rt_apiKey') || '';
 var historyLog = store.get('rt_history', []);
-
-var SIL_RMS = {1:0.004,2:0.006,3:0.009,4:0.013,5:0.018,6:0.024,7:0.032,8:0.045,9:0.06,10:0.08};
 
 var mode = 'ptt';
 var appState = 'idle';
@@ -501,15 +527,15 @@ function ensureAudioReady(){
 }
 
 function handleMicChunk(pcmBuffer, rms){
-  if (appState === 'idle' || appState === 'finishing') return;
-  var threshold = SIL_RMS[settings.silLevel] || 0.013;
+  if (appState === 'idle' || appState === 'finishing' || appState === 'switching') return;
+  var threshold = Math.pow(10, settings.silDb / 20);
   if (rms > threshold){
     hasSpokenSinceActive = true;
     silenceMs = 0;
   } else if (hasSpokenSinceActive){
     silenceMs += 100;
   }
-  if (appState === 'connecting' || appState === 'switching'){
+  if (appState === 'connecting'){
     pendingChunks.push(pcmBuffer);
     if (pendingChunks.length > 60) pendingChunks.shift(); // cap ~6s of buffering as a safety net
     return;
@@ -533,7 +559,8 @@ function onAudioReceived(base64){
 
 function targetForDirection(dir){ return dir === 'A' ? settings.langB : 'ru'; }
 
-function stopAndFinish(onDone){
+function stopAndFinish(onDone, opts){
+  var maxNoAudioWait = (opts && opts.maxNoAudioWait != null) ? opts.maxNoAudioWait : 3500;
   appState = 'finishing';
   renderState();
   var finishStartTs = performance.now();
@@ -542,11 +569,11 @@ function stopAndFinish(onDone){
     var stillPlaying = playQueue && playQueue.isPlaying();
     if (stillPlaying) return;
     if (lastChunkHadAudio){
-      if (performance.now() - lastAudioChunkTs > 1200) finish();
+      if (performance.now() - lastAudioChunkTs > 800) finish();
     } else {
-      if (performance.now() - finishStartTs > 3500) finish();
+      if (performance.now() - finishStartTs > maxNoAudioWait) finish();
     }
-  }, 150);
+  }, 120);
   var hard = setTimeout(finish, 8000);
   function finish(){
     if (done) return;
@@ -560,7 +587,8 @@ function stopAndFinish(onDone){
 function commitTurnToHistory(dir){
   if (curTurnAudio.length){
     lastTurnAudio = curTurnAudio;
-    els.replayBtn.hidden = false;
+    els.replayBtnRU.hidden = false;
+    els.replayBtnPT.hidden = false;
   }
   if (curInputText.trim() || curOutputText.trim()){
     var item = {
@@ -628,11 +656,15 @@ function resetToIdle(){
 
 function replayLastTurn(){
   if (!lastTurnAudio.length || !playQueue){ showToast('Пока нечего повторить'); return; }
+  if (appState === 'connecting' || appState === 'listening'){
+    showToast('Секунду — сначала завершится текущая реплика', null);
+    return;
+  }
   lastTurnAudio.forEach(function(int16){ playQueue.enqueue(int16); });
   logDebug('Повтор последнего перевода (' + lastTurnAudio.length + ' фрагм.)');
 }
 
-function finishTurnAndSwitch(){
+function finishTurnAndSwitch(opts){
   if (appState !== 'listening') return;
   var dir = activeDirection;
   stopAndFinish(function(){
@@ -647,7 +679,7 @@ function finishTurnAndSwitch(){
       var nextDir = dir === 'A' ? 'B' : 'A';
       openChannelFor(nextDir).catch(function(){ autoRunning = false; });
     }, guard);
-  });
+  }, opts);
 }
 
 function onPttDown(dir){
@@ -704,8 +736,9 @@ function toggleAuto(){
 }
 function manualNextTurn(){
   if (mode === 'auto' && appState === 'listening'){
+    var hadSpeech = hasSpokenSinceActive;
     hasSpokenSinceActive = true;
-    finishTurnAndSwitch();
+    finishTurnAndSwitch({ maxNoAudioWait: hadSpeech ? 3500 : 300 });
   }
 }
 
@@ -732,10 +765,11 @@ function renderState(){
   }
 
   els.turnDot.classList.toggle('on', appState === 'listening');
+  var finishingLabel = activeDirection === 'A' ? 'Довожу: русский → ' + mPT.label + '…' : 'Довожу: ' + mPT.label + ' → русский…';
   var turnLabels = {
     idle: 'Готово к разговору', connecting: 'Подключаюсь…',
     listening: activeDirection === 'A' ? 'Ход: русский → ' + mPT.label : 'Ход: ' + mPT.label + ' → русский',
-    finishing: 'Довожу перевод…', switching: 'Передаю ход…'
+    finishing: finishingLabel, switching: 'Передаю ход…'
   };
   els.turnText.textContent = turnLabels[appState] || '';
 
@@ -806,6 +840,7 @@ function applyLangBLabel(){
   els.btnPT.textContent = m.speak;
   els.btnPT.setAttribute('aria-label', m.speak);
   if (appState === 'idle') els.phrasePT.textContent = m.placeholder;
+  if (typeof updateTextDirUI === 'function') updateTextDirUI();
 }
 applyLangBLabel();
 els.langB.addEventListener('change', function(){
@@ -824,13 +859,12 @@ els.volSlider.addEventListener('input', function(){
   store.set('rt_volume', settings.volume);
 });
 
-function silLabel(v){ if (v<=3) return 'высокая (ловит тихое)'; if (v<=7) return 'средняя'; return 'низкая (только чёткая речь)'; }
-els.silSlider.value = settings.silLevel;
-els.silOut.textContent = silLabel(settings.silLevel);
+els.silSlider.value = settings.silDb;
+els.silOut.textContent = '\u2212' + Math.abs(settings.silDb) + ' \u0434\u0411';
 els.silSlider.addEventListener('input', function(){
-  settings.silLevel = Number(els.silSlider.value);
-  els.silOut.textContent = silLabel(settings.silLevel);
-  store.set('rt_silLevel', settings.silLevel);
+  settings.silDb = Number(els.silSlider.value);
+  els.silOut.textContent = (settings.silDb < 0 ? '\u2212' + Math.abs(settings.silDb) : settings.silDb) + ' \u0434\u0411';
+  store.set('rt_silDb', settings.silDb);
 });
 
 els.pauseSlider.value = settings.pauseMs;
@@ -858,10 +892,14 @@ function setMode(m){
   mode = m;
   els.modeBtnPtt.classList.toggle('on', m === 'ptt');
   els.modeBtnAuto.classList.toggle('on', m === 'auto');
+  els.modeBtnText.classList.toggle('on', m === 'text');
+  els.stage.hidden = (m === 'text');
+  els.textModePanel.hidden = (m !== 'text');
   renderState();
 }
 els.modeBtnPtt.addEventListener('click', function(){ setMode('ptt'); });
 els.modeBtnAuto.addEventListener('click', function(){ setMode('auto'); });
+els.modeBtnText.addEventListener('click', function(){ setMode('text'); });
 
 ['mousedown','touchstart'].forEach(function(ev){
   els.btnRU.addEventListener(ev, function(e){ e.preventDefault(); onPttDown('A'); });
@@ -874,7 +912,73 @@ els.modeBtnAuto.addEventListener('click', function(){ setMode('auto'); });
 
 els.autoToggleBtn.addEventListener('click', toggleAuto);
 els.nextTurnBtn.addEventListener('click', manualNextTurn);
-els.replayBtn.addEventListener('click', replayLastTurn);
+els.replayBtnRU.addEventListener('click', replayLastTurn);
+els.replayBtnPT.addEventListener('click', replayLastTurn);
+
+var TEXT_MODEL = 'gemini-3.1-flash-lite';
+var textDirForward = true; // true: русский -> langB ; false: langB -> русский
+
+function updateTextDirUI(){
+  var mPT = LANG_META[settings.langB] || LANG_META['pt-PT'];
+  els.textDirBtn.textContent = textDirForward ? ('Русский → ' + mPT.label) : (mPT.label + ' → Русский');
+}
+els.textDirBtn.addEventListener('click', function(){
+  textDirForward = !textDirForward;
+  updateTextDirUI();
+});
+updateTextDirUI();
+
+function currentTextLangs(){
+  return textDirForward ? { fromCode:'ru', toCode:settings.langB } : { fromCode:settings.langB, toCode:'ru' };
+}
+
+els.textTranslateBtn.addEventListener('click', function(){
+  var text = els.textInput.value.trim();
+  if (!text) return;
+  if (!apiKey){ showToast('Сначала укажите API-ключ в настройках', 'error'); openPanel(els.settingsPanel); return; }
+  if (!navigator.onLine){ showToast('Нет подключения к интернету', 'error'); return; }
+  var langs = currentTextLangs();
+  var fromLabel = (LANG_META[langs.fromCode] || {}).label || langs.fromCode;
+  var toLabel = (LANG_META[langs.toCode] || {}).label || langs.toCode;
+  els.textOutput.textContent = 'Перевожу…';
+  els.textOutput.classList.add('placeholder');
+  els.textOutputCopy.hidden = true;
+  els.textTranslateBtn.disabled = true;
+  var prompt = 'Переведи текст ниже с языка "' + fromLabel + '" на язык "' + toLabel +
+    '". Если целевой язык — европейский португальский (Portugal), используй только его нормы, ни в коем случае не бразильские. ' +
+    'В ответе выведи только сам перевод, без кавычек и пояснений.\n\nТекст:\n' + text;
+  fetch('https://generativelanguage.googleapis.com/v1beta/models/' + TEXT_MODEL + ':generateContent?key=' + encodeURIComponent(apiKey), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  }).then(function(resp){
+    if (!resp.ok){
+      return resp.text().then(function(t){ throw new Error('HTTP ' + resp.status + ': ' + t.slice(0,200)); });
+    }
+    return resp.json();
+  }).then(function(data){
+    var out = '';
+    try { out = data.candidates[0].content.parts[0].text.trim(); } catch(e){ out = ''; }
+    els.textOutput.textContent = out || '(пустой ответ)';
+    els.textOutput.classList.toggle('placeholder', !out);
+    els.textOutputCopy.hidden = !out;
+    logDebug('Текстовый перевод получен (' + out.length + ' симв.)');
+  }).catch(function(e){
+    els.textOutput.textContent = 'Не удалось перевести';
+    els.textOutput.classList.add('placeholder');
+    showToast('Ошибка перевода: ' + e.message, 'error');
+    logDebug('Ошибка текстового перевода: ' + e.message);
+  }).finally(function(){
+    els.textTranslateBtn.disabled = false;
+  });
+});
+
+els.textOutputCopy.addEventListener('click', function(){
+  var text = els.textOutput.textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ showToast('Перевод скопирован'); }).catch(function(){ showToast('Не удалось скопировать', 'error'); });
+  }
+});
 
 window.addEventListener('online', function(){ els.netDot.classList.remove('offline'); });
 window.addEventListener('offline', function(){ els.netDot.classList.add('offline'); showToast('Пропало подключение к интернету', 'error'); });
