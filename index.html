@@ -98,6 +98,10 @@ button, select, input{font-family:inherit;}
 .field input[type="password"],.field select{background:var(--panel);border:1px solid #322d40;border-radius:var(--radius-sm);padding:10px 12px;color:var(--paper);font-size:.88rem;}
 .field input[type="range"]{accent-color:var(--teal);}
 .field-hint{font-size:.72rem;color:var(--dim);opacity:.8;margin-top:-8px;line-height:1.4;}
+.level-meter{position:relative;height:8px;border-radius:999px;background:#2a2536;overflow:visible;margin-top:-6px;}
+.level-meter-fill{position:absolute;left:0;top:0;height:100%;width:0%;border-radius:999px;background:var(--teal);transition:width .08s linear,background .15s;}
+.level-meter-fill.over{background:var(--amber);}
+.level-meter-mark{position:absolute;top:-3px;width:2px;height:14px;background:var(--paper);left:0%;}
 .checkbox-field{flex-direction:row;align-items:center;gap:8px;}
 .checkbox-field input{accent-color:var(--teal);width:16px;height:16px;}
 .divider{height:1px;background:#2a2536;margin:2px 0;}
@@ -223,7 +227,8 @@ button, select, input{font-family:inherit;}
       <span>Порог тишины: <output id="silOut">−32 дБ</output></span>
       <input type="range" id="silSlider" min="-50" max="-15" value="-32" step="1">
     </label>
-    <p class="field-hint">Всё громче порога считается речью и записывается; всё тише — тишиной и отсекается. Ловит фоновый шум → двигайте к −15. Обрезает тихие фразы → двигайте к −50.</p>
+    <div class="level-meter"><div class="level-meter-fill" id="levelMeterFill"></div><div class="level-meter-mark" id="levelMeterMark"></div></div>
+    <p class="field-hint" id="levelReadout">Сейчас: — дБ. Всё громче порога считается речью; всё тише — тишиной. Ловит фоновый шум → двигайте к −15. Обрезает тихие фразы → двигайте к −50.</p>
 
     <label class="field">
       <span>Пауза перед сменой хода (авто-режим): <output id="pauseOut">0.9с</output></span>
@@ -255,6 +260,7 @@ var MODEL = 'gemini-3.5-live-translate-preview';
 var IN_RATE = 16000;
 var OUT_RATE = 24000;
 var GUARD_MIN_MS = 400, GUARD_MAX_MS = 1200;
+var MAX_TURN_MS = 25000; // hard safety cap: force a turn to finish even if silence is never detected
 
 var LANG_META = {
   'ru':    { label:'Русский',              speak:'Говорить', listening:'Слушаю…',        translating:'Перевожу…',   placeholder:'Здесь появится перевод',         waiting:'Нажмите и говорите',       waitingAuto:'Ожидание…' },
@@ -278,7 +284,7 @@ var els = {
   closeSettings:$('closeSettings'), closeHistory:$('closeHistory'), scrim:$('scrim'),
   apiKeyInput:$('apiKeyInput'), langA:$('langA'), langB:$('langB'), labelPT:$('labelPT'), labelRU:$('labelRU'),
   volSlider:$('volSlider'), volOut:$('volOut'),
-  silSlider:$('silSlider'), silOut:$('silOut'),
+  silSlider:$('silSlider'), silOut:$('silOut'), levelMeterFill:$('levelMeterFill'), levelMeterMark:$('levelMeterMark'), levelReadout:$('levelReadout'),
   pauseSlider:$('pauseSlider'), pauseOut:$('pauseOut'),
   debugToggle:$('debugToggle'), debugLog:$('debugLog'), debugLogWrap:$('debugLogWrap'), copyLogBtn:$('copyLogBtn'),
   stage:$('stage'), zonePT:$('zonePT'), zoneRU:$('zoneRU'),
@@ -314,7 +320,7 @@ var mode = 'ptt';
 var appState = 'idle';
 var activeChannel = null, activeDirection = null;
 var micStream=null, micCtx=null, workletNode=null, playCtx=null, playQueue=null;
-var hasSpokenSinceActive=false, silenceMs=0, lastChunkHadAudio=false, lastAudioChunkTs=0;
+var hasSpokenSinceActive=false, silenceMs=0, lastChunkHadAudio=false, lastAudioChunkTs=0, turnStartTs=0;
 var curInputText='', curOutputText='';
 var autoRunning = false;
 var pendingChunks = [];      // mic audio captured while a channel is still connecting/switching, sent once ready
@@ -355,6 +361,27 @@ function base64ToInt16(base64){
   return new Int16Array(bytes.buffer);
 }
 
+var METER_MIN_DB = -60, METER_MAX_DB = 0;
+function dbToPercent(db){
+  var pct = (db - METER_MIN_DB) / (METER_MAX_DB - METER_MIN_DB) * 100;
+  return Math.max(0, Math.min(100, pct));
+}
+function updateThresholdMark(){
+  if (els.levelMeterMark) els.levelMeterMark.style.left = dbToPercent(settings.silDb) + '%';
+}
+var lastMeterTs = 0;
+function updateLevelMeter(rms){
+  var now = performance.now();
+  if (now - lastMeterTs < 120) return;
+  lastMeterTs = now;
+  var db = rms > 0.00001 ? 20 * Math.log10(rms) : METER_MIN_DB;
+  if (!els.levelMeterFill) return;
+  els.levelMeterFill.style.width = dbToPercent(db) + '%';
+  els.levelMeterFill.classList.toggle('over', db > settings.silDb);
+  var shown = db <= METER_MIN_DB ? ('\u2264\u2212' + Math.abs(METER_MIN_DB)) : Math.round(db);
+  els.levelReadout.textContent = '\u0421\u0435\u0439\u0447\u0430\u0441: ' + shown + ' \u0434\u0411. \u0412\u0441\u0451 \u0433\u0440\u043e\u043c\u0447\u0435 \u043f\u043e\u0440\u043e\u0433\u0430 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044f \u0440\u0435\u0447\u044c\u044e; \u0432\u0441\u0451 \u0442\u0438\u0448\u0435 \u2014 \u0442\u0438\u0448\u0438\u043d\u043e\u0439.';
+}
+
 function PlaybackQueue(ctx){
   this.ctx = ctx;
   this.nextStart = 0;
@@ -373,7 +400,7 @@ PlaybackQueue.prototype.enqueue = function(int16){
   src.connect(this.gain);
   var now = this.ctx.currentTime;
   var wasIdle = this.nextStart <= now;
-  var startAt = wasIdle ? (now + 0.06) : Math.max(now, this.nextStart);
+  var startAt = wasIdle ? (now + 0.2) : Math.max(now, this.nextStart);
   src.start(startAt);
   this.nextStart = startAt + buf.duration;
   var self = this;
@@ -535,6 +562,7 @@ function ensureAudioReady(){
 }
 
 function handleMicChunk(pcmBuffer, rms){
+  updateLevelMeter(rms);
   if (appState === 'idle' || appState === 'finishing' || appState === 'switching') return;
   var threshold = Math.pow(10, settings.silDb / 20);
   if (rms > threshold){
@@ -550,9 +578,12 @@ function handleMicChunk(pcmBuffer, rms){
   }
   if (appState === 'listening' && activeChannel){
     activeChannel.sendAudio(arrayBufferToBase64(pcmBuffer));
-    if (hasSpokenSinceActive && silenceMs >= settings.pauseMs){
-      if (mode === 'auto') finishTurnAndSwitch();
-      else if (mode === 'ptt') finishPtt(activeDirection);
+    if (mode === 'auto' && hasSpokenSinceActive && silenceMs >= settings.pauseMs){
+      finishTurnAndSwitch();
+    } else if (mode === 'ptt' && hasSpokenSinceActive && silenceMs >= Math.min(settings.pauseMs, 1000)){
+      finishPtt(activeDirection);
+    } else if (hasSpokenSinceActive && (performance.now() - turnStartTs) > MAX_TURN_MS){
+      if (mode === 'auto') finishTurnAndSwitch(); else finishPtt(activeDirection);
     }
   }
 }
@@ -562,6 +593,7 @@ function onAudioReceived(base64){
   var int16 = base64ToInt16(base64);
   playQueue.enqueue(int16);
   curTurnAudio.push(int16);
+  if (curTurnAudio.length > 120) curTurnAudio.shift(); // keep replay scoped to roughly the last ~20-30s, not the whole turn
   lastAudioChunkTs = performance.now();
   lastChunkHadAudio = true;
 }
@@ -637,6 +669,7 @@ function openChannelFor(dir){
   });
   return activeChannel.connect().then(function(){
     appState = 'listening';
+    turnStartTs = performance.now();
     var toFlush = pendingChunks;
     pendingChunks = [];
     logDebug('Канал открыт → цель ' + target + (toFlush.length ? ('; отправляю ' + toFlush.length + ' буферизованных фрагм.') : ''));
@@ -714,25 +747,6 @@ function finishPtt(dir){
   });
 }
 
-function onPttDown(dir){
-  if (mode !== 'ptt' || appState !== 'idle') return;
-  ensureAudioOrToast().then(function(ok){
-    if (!ok) return;
-    openChannelFor(dir).catch(function(){});
-  });
-}
-function onPttUp(dir){
-  if (mode !== 'ptt' || appState !== 'listening' || activeDirection !== dir) return;
-  if (!hasSpokenSinceActive){
-    showToast('Речь не обнаружена — попробуйте снова', null);
-    closeActiveChannel();
-    appState = 'idle';
-    renderState();
-    return;
-  }
-  finishPtt(dir);
-}
-
 function ensureAudioOrToast(){
   if (!navigator.onLine){ showToast('Нет подключения к интернету', 'error'); return Promise.resolve(false); }
   if (!apiKey){ showToast('Сначала укажите API-ключ в настройках', 'error'); openPanel(els.settingsPanel); return Promise.resolve(false); }
@@ -785,6 +799,8 @@ function renderState(){
   if (mode === 'ptt'){
     els.statusRU.textContent = listeningA ? mRU.listening : finishingA ? mRU.translating : mRU.waiting;
     els.statusPT.textContent = listeningB ? mPT.listening : finishingB ? mPT.translating : mPT.waiting;
+    els.btnRU.textContent = listeningA ? '✓' : mRU.speak;
+    els.btnPT.textContent = listeningB ? '✓' : mPT.speak;
   } else {
     els.statusRU.textContent = listeningA ? mRU.listening : finishingA ? mRU.translating : mRU.waitingAuto;
     els.statusPT.textContent = listeningB ? mPT.listening : finishingB ? mPT.translating : mPT.waitingAuto;
@@ -890,12 +906,22 @@ function applyLangLabels(){
 }
 applyLangLabels();
 els.langA.addEventListener('change', function(){
+  if (els.langA.value === settings.langB){
+    showToast('Языки должны отличаться', 'error');
+    els.langA.value = settings.langA;
+    return;
+  }
   settings.langA = els.langA.value;
   store.set('rt_langA', settings.langA);
   applyLangLabels();
   renderState();
 });
 els.langB.addEventListener('change', function(){
+  if (els.langB.value === settings.langA){
+    showToast('Языки должны отличаться', 'error');
+    els.langB.value = settings.langB;
+    return;
+  }
   settings.langB = els.langB.value;
   store.set('rt_langB', settings.langB);
   applyLangLabels();
@@ -913,9 +939,11 @@ els.volSlider.addEventListener('input', function(){
 
 els.silSlider.value = settings.silDb;
 els.silOut.textContent = '\u2212' + Math.abs(settings.silDb) + ' \u0434\u0411';
+updateThresholdMark();
 els.silSlider.addEventListener('input', function(){
   settings.silDb = Number(els.silSlider.value);
   els.silOut.textContent = (settings.silDb < 0 ? '\u2212' + Math.abs(settings.silDb) : settings.silDb) + ' \u0434\u0411';
+  updateThresholdMark();
   store.set('rt_silDb', settings.silDb);
 });
 
@@ -953,19 +981,28 @@ els.modeBtnPtt.addEventListener('click', function(){ setMode('ptt'); });
 els.modeBtnAuto.addEventListener('click', function(){ setMode('auto'); });
 els.modeBtnText.addEventListener('click', function(){ setMode('text'); });
 
-var pttMouseDown = { A:false, B:false };
-els.btnRU.addEventListener('mousedown', function(e){ e.preventDefault(); pttMouseDown.A = true; onPttDown('A'); });
-els.btnPT.addEventListener('mousedown', function(e){ e.preventDefault(); pttMouseDown.B = true; onPttDown('B'); });
-window.addEventListener('mouseup', function(){
-  if (pttMouseDown.A){ pttMouseDown.A = false; onPttUp('A'); }
-  if (pttMouseDown.B){ pttMouseDown.B = false; onPttUp('B'); }
-});
-els.btnRU.addEventListener('touchstart', function(e){ e.preventDefault(); onPttDown('A'); });
-els.btnPT.addEventListener('touchstart', function(e){ e.preventDefault(); onPttDown('B'); });
-['touchend','touchcancel'].forEach(function(ev){
-  els.btnRU.addEventListener(ev, function(e){ e.preventDefault(); onPttUp('A'); });
-  els.btnPT.addEventListener(ev, function(e){ e.preventDefault(); onPttUp('B'); });
-});
+function onPttClick(dir){
+  if (mode !== 'ptt') return;
+  if (appState === 'idle'){
+    ensureAudioOrToast().then(function(ok){
+      if (!ok) return;
+      openChannelFor(dir).catch(function(){});
+    });
+    return;
+  }
+  if (appState === 'listening' && activeDirection === dir){
+    if (!hasSpokenSinceActive){
+      showToast('Речь не обнаружена — попробуйте снова', null);
+      closeActiveChannel();
+      appState = 'idle';
+      renderState();
+      return;
+    }
+    finishPtt(dir); // clicked again while listening -- finish right away, don't wait for silence
+  }
+}
+els.btnRU.addEventListener('click', function(e){ e.preventDefault(); onPttClick('A'); });
+els.btnPT.addEventListener('click', function(e){ e.preventDefault(); onPttClick('B'); });
 
 els.autoToggleBtn.addEventListener('click', toggleAuto);
 els.nextTurnBtn.addEventListener('click', manualNextTurn);
