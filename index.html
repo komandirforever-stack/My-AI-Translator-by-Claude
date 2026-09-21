@@ -78,6 +78,8 @@ button, select, input{font-family:inherit;}
 .text-output-wrap{flex:1;display:flex;flex-direction:column;gap:8px;min-height:0;}
 .text-output{flex:1;background:var(--panel);border-radius:var(--radius-md);padding:14px;font-family:'Alegreya',serif;font-size:1.2rem;line-height:1.4;overflow-y:auto;min-height:80px;}
 .text-output.placeholder{color:var(--dim);font-style:italic;font-family:'Golos Text',sans-serif;font-size:.95rem;}
+.text-output-actions{display:flex;gap:8px;}
+.text-output-actions .ghost-btn{flex:1;}
 
 .bottombar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;flex-shrink:0;}
 .mode-switch{display:flex;background:var(--panel);border-radius:999px;padding:3px;flex-shrink:0;}
@@ -171,7 +173,10 @@ button, select, input{font-family:inherit;}
     <button id="textTranslateBtn" class="primary-btn text-translate-btn">Перевести</button>
     <div class="text-output-wrap">
       <div id="textOutput" class="text-output placeholder">Перевод появится здесь</div>
-      <button id="textOutputCopy" class="ghost-btn" hidden>Копировать перевод</button>
+      <div class="text-output-actions">
+        <button id="textSpeakBtn" class="ghost-btn" hidden>🔊 Озвучить перевод</button>
+        <button id="textOutputCopy" class="ghost-btn" hidden>Копировать перевод</button>
+      </div>
     </div>
   </div>
 
@@ -225,10 +230,10 @@ button, select, input{font-family:inherit;}
 
     <label class="field">
       <span>Порог тишины: <output id="silOut">−32 дБ</output></span>
-      <input type="range" id="silSlider" min="-50" max="-15" value="-32" step="1">
+      <input type="range" id="silSlider" min="-50" max="-6" value="-32" step="1">
     </label>
     <div class="level-meter"><div class="level-meter-fill" id="levelMeterFill"></div><div class="level-meter-mark" id="levelMeterMark"></div></div>
-    <p class="field-hint" id="levelReadout">Сейчас: — дБ. Всё громче порога считается речью; всё тише — тишиной. Ловит фоновый шум → двигайте к −15. Обрезает тихие фразы → двигайте к −50.</p>
+    <p class="field-hint" id="levelReadout">Сейчас: — дБ. Всё громче порога считается речью; всё тише — тишиной. Ловит фоновый шум → двигайте к −6. Обрезает тихие фразы → двигайте к −50.</p>
 
     <label class="field">
       <span>Пауза перед сменой хода (авто-режим): <output id="pauseOut">0.9с</output></span>
@@ -261,6 +266,7 @@ var IN_RATE = 16000;
 var OUT_RATE = 24000;
 var GUARD_MIN_MS = 400, GUARD_MAX_MS = 1200;
 var MAX_TURN_MS = 25000; // hard safety cap: force a turn to finish even if silence is never detected
+var NO_SPEECH_TIMEOUT_MS = 40000; // even more defensive: if the threshold never once registers speech, don't hang forever
 
 var LANG_META = {
   'ru':    { label:'Русский',              speak:'Говорить', listening:'Слушаю…',        translating:'Перевожу…',   placeholder:'Здесь появится перевод',         waiting:'Нажмите и говорите',       waitingAuto:'Ожидание…' },
@@ -297,7 +303,7 @@ var els = {
   turnDot:$('turnDot'), turnText:$('turnText'),
   historyList:$('historyList'), historyEmpty:$('historyEmpty'), clearHistoryBtn:$('clearHistoryBtn'),
   textModePanel:$('textModePanel'), textDirBtn:$('textDirBtn'), textInput:$('textInput'),
-  textTranslateBtn:$('textTranslateBtn'), textOutput:$('textOutput'), textOutputCopy:$('textOutputCopy'),
+  textTranslateBtn:$('textTranslateBtn'), textOutput:$('textOutput'), textOutputCopy:$('textOutputCopy'), textSpeakBtn:$('textSpeakBtn'),
   toast:$('toast'), netDot:$('netDot')
 };
 
@@ -320,7 +326,7 @@ var mode = 'ptt';
 var appState = 'idle';
 var activeChannel = null, activeDirection = null;
 var micStream=null, micCtx=null, workletNode=null, playCtx=null, playQueue=null;
-var hasSpokenSinceActive=false, silenceMs=0, lastChunkHadAudio=false, lastAudioChunkTs=0, turnStartTs=0;
+var hasSpokenSinceActive=false, silenceMs=0, lastChunkHadAudio=false, lastAudioChunkTs=0, lastTranscriptTs=0, turnStartTs=0;
 var curInputText='', curOutputText='';
 var autoRunning = false;
 var pendingChunks = [];      // mic audio captured while a channel is still connecting/switching, sent once ready
@@ -578,11 +584,16 @@ function handleMicChunk(pcmBuffer, rms){
   }
   if (appState === 'listening' && activeChannel){
     activeChannel.sendAudio(arrayBufferToBase64(pcmBuffer));
+    var turnAgeMs = performance.now() - turnStartTs;
     if (mode === 'auto' && hasSpokenSinceActive && silenceMs >= settings.pauseMs){
       finishTurnAndSwitch();
     } else if (mode === 'ptt' && hasSpokenSinceActive && silenceMs >= Math.min(settings.pauseMs, 1000)){
       finishPtt(activeDirection);
-    } else if (hasSpokenSinceActive && (performance.now() - turnStartTs) > MAX_TURN_MS){
+    } else if (hasSpokenSinceActive && turnAgeMs > MAX_TURN_MS){
+      if (mode === 'auto') finishTurnAndSwitch(); else finishPtt(activeDirection);
+    } else if (!hasSpokenSinceActive && turnAgeMs > NO_SPEECH_TIMEOUT_MS){
+      // порог тишины не подходит под это окружение — ничего не засчиталось речью так долго; не зависаем навсегда
+      logDebug('Долго ничего не распознано как речь (порог ' + settings.silDb + ' дБ) — передаю ход, чтобы не зависать.');
       if (mode === 'auto') finishTurnAndSwitch(); else finishPtt(activeDirection);
     }
   }
@@ -610,7 +621,8 @@ function stopAndFinish(onDone, opts){
     var stillPlaying = playQueue && playQueue.isPlaying();
     if (stillPlaying) return;
     if (lastChunkHadAudio){
-      if (performance.now() - lastAudioChunkTs > 800) finish();
+      var lastActivity = Math.max(lastAudioChunkTs, lastTranscriptTs);
+      if (performance.now() - lastActivity > 1000) finish();
     } else {
       if (performance.now() - finishStartTs > maxNoAudioWait) finish();
     }
@@ -651,13 +663,13 @@ function openChannelFor(dir){
   appState = 'connecting';
   renderState();
   activeDirection = dir;
-  hasSpokenSinceActive = false; silenceMs = 0; lastChunkHadAudio = false;
+  hasSpokenSinceActive = false; silenceMs = 0; lastChunkHadAudio = false; lastTranscriptTs = 0;
   curInputText = ''; curOutputText = ''; curTurnAudio = [];
   updatePhraseUI();
   var target = targetForDirection(dir);
   activeChannel = new TranslatorChannel(target, {
-    onInput: function(t){ curInputText += t; updatePhraseUI(); },
-    onOutput: function(t){ curOutputText += t; updatePhraseUI(); },
+    onInput: function(t){ curInputText += t; lastTranscriptTs = performance.now(); updatePhraseUI(); },
+    onOutput: function(t){ curOutputText += t; lastTranscriptTs = performance.now(); updatePhraseUI(); },
     onAudio: onAudioReceived,
     onClose: function(ev){
       if (appState !== 'idle' && ev.code !== 1000){
@@ -1033,11 +1045,13 @@ els.textTranslateBtn.addEventListener('click', function(){
   if (!apiKey){ showToast('Сначала укажите API-ключ в настройках', 'error'); openPanel(els.settingsPanel); return; }
   if (!navigator.onLine){ showToast('Нет подключения к интернету', 'error'); return; }
   var langs = currentTextLangs();
+  lastTextOutLang = langs.toCode;
   var fromLabel = (LANG_META[langs.fromCode] || {}).label || langs.fromCode;
   var toLabel = (LANG_META[langs.toCode] || {}).label || langs.toCode;
   els.textOutput.textContent = 'Перевожу…';
   els.textOutput.classList.add('placeholder');
   els.textOutputCopy.hidden = true;
+  els.textSpeakBtn.hidden = true;
   els.textTranslateBtn.disabled = true;
   var ptPtNote = '';
   if (langs.toCode === 'pt-PT'){
@@ -1064,6 +1078,7 @@ els.textTranslateBtn.addEventListener('click', function(){
     els.textOutput.textContent = out || '(пустой ответ)';
     els.textOutput.classList.toggle('placeholder', !out);
     els.textOutputCopy.hidden = !out;
+    els.textSpeakBtn.hidden = !out;
     logDebug('Текстовый перевод получен (' + out.length + ' симв.)');
   }).catch(function(e){
     els.textOutput.textContent = 'Не удалось перевести';
@@ -1080,6 +1095,24 @@ els.textOutputCopy.addEventListener('click', function(){
   if (navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(text).then(function(){ showToast('Перевод скопирован'); }).catch(function(){ showToast('Не удалось скопировать', 'error'); });
   }
+});
+
+var lastTextOutLang = 'ru';
+els.textSpeakBtn.addEventListener('click', function(){
+  var text = els.textOutput.textContent;
+  if (!text || els.textOutput.classList.contains('placeholder')) return;
+  if (!('speechSynthesis' in window)){ showToast('Озвучка не поддерживается в этом браузере', 'error'); return; }
+  window.speechSynthesis.cancel();
+  var utter = new SpeechSynthesisUtterance(text);
+  utter.lang = lastTextOutLang;
+  var voices = window.speechSynthesis.getVoices();
+  var exact = voices.filter(function(v){ return v.lang && v.lang.toLowerCase() === lastTextOutLang.toLowerCase(); })[0];
+  if (exact){
+    utter.voice = exact;
+  } else if (lastTextOutLang.toLowerCase() === 'pt-pt'){
+    logDebug('В этом браузере не нашлось отдельного голоса pt-PT — говорит голос по умолчанию, точность акцента не гарантирована.');
+  }
+  window.speechSynthesis.speak(utter);
 });
 
 window.addEventListener('online', function(){ els.netDot.classList.remove('offline'); });
