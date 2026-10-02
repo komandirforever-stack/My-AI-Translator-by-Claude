@@ -327,6 +327,7 @@ var appState = 'idle';
 var activeChannel = null, activeDirection = null;
 var micStream=null, micCtx=null, workletNode=null, playCtx=null, playQueue=null;
 var hasSpokenSinceActive=false, silenceMs=0, lastChunkHadAudio=false, lastAudioChunkTs=0, lastTranscriptTs=0, turnStartTs=0;
+var speakerBusyUntil = 0, lastSpeakerBusyUI = null;
 var curInputText='', curOutputText='';
 var autoRunning = false;
 var pendingChunks = [];      // mic audio captured while a channel is still connecting/switching, sent once ready
@@ -570,17 +571,28 @@ function ensureAudioReady(){
 function handleMicChunk(pcmBuffer, rms){
   updateLevelMeter(rms);
   if (appState === 'idle' || appState === 'finishing' || appState === 'switching') return;
+  if (appState === 'connecting'){
+    pendingChunks.push(pcmBuffer);
+    if (pendingChunks.length > 60) pendingChunks.shift(); // cap ~6s of buffering as a safety net
+    return;
+  }
+  // Never listen while our own translation is audibly playing (or the brief settle window right after) —
+  // otherwise the mic hears its own echo, silence never registers, and turns never end.
+  var isPlayingNow = !!(playQueue && playQueue.isPlaying());
+  if (isPlayingNow) speakerBusyUntil = performance.now() + 220;
+  var gated = performance.now() < speakerBusyUntil;
+  if (gated !== lastSpeakerBusyUI && appState === 'listening'){
+    lastSpeakerBusyUI = gated;
+    updateListeningStatusText(gated);
+  }
+  if (gated) return;
+
   var threshold = Math.pow(10, settings.silDb / 20);
   if (rms > threshold){
     hasSpokenSinceActive = true;
     silenceMs = 0;
   } else if (hasSpokenSinceActive){
     silenceMs += 100;
-  }
-  if (appState === 'connecting'){
-    pendingChunks.push(pcmBuffer);
-    if (pendingChunks.length > 60) pendingChunks.shift(); // cap ~6s of buffering as a safety net
-    return;
   }
   if (appState === 'listening' && activeChannel){
     activeChannel.sendAudio(arrayBufferToBase64(pcmBuffer));
@@ -664,6 +676,7 @@ function openChannelFor(dir){
   renderState();
   activeDirection = dir;
   hasSpokenSinceActive = false; silenceMs = 0; lastChunkHadAudio = false; lastTranscriptTs = 0;
+  speakerBusyUntil = 0; lastSpeakerBusyUI = null;
   curInputText = ''; curOutputText = ''; curTurnAudio = [];
   updatePhraseUI();
   var target = targetForDirection(dir);
@@ -791,6 +804,15 @@ function manualNextTurn(){
     var hadSpeech = hasSpokenSinceActive;
     hasSpokenSinceActive = true;
     finishTurnAndSwitch({ maxNoAudioWait: hadSpeech ? 3500 : 300 });
+  }
+}
+
+function updateListeningStatusText(busy){
+  var mRU = LANG_META[settings.langA] || LANG_META['ru'], mPT = LANG_META[settings.langB] || LANG_META['pt-PT'];
+  if (activeDirection === 'A'){
+    els.statusRU.textContent = busy ? 'Секунду — звучит перевод…' : mRU.listening;
+  } else if (activeDirection === 'B'){
+    els.statusPT.textContent = busy ? 'Um momento — a tocar…' : mPT.listening;
   }
 }
 
